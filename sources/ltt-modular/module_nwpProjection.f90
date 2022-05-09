@@ -199,25 +199,11 @@ contains
                     db*dc*bgr_fields%fis(jx,jy+1) + &
                     db*da*bgr_fields%fis(jx+1,jy+1)
 
-
                 ! Surface geometric height (above the reference ellipsoid)
-                ! 1. compute geopotential (a.k.a. dynamic) height
-                zs_ip = fis_ip/gn
-                ! 2. compute orthometric height from given dynamic height
-                ! using Kraus formula
-                zs_ip = gpH2ortH(zs_ip, degtor(columnLat))
-                ! 3. transform to ellipsoidal height
-                ! h = H + N
-                ! N: Geoid undulation
-                ! H: Orthometric height (MSL height)
-                ! h: Height above the reference ellipsoid
-                undul_ip = &
-                    dd*dc*undulations%values(jx,jy) + &
-                    dd*da*undulations%values(jx+1,jy) + &
-                    db*dc*undulations%values(jx,jy+1) + &
-                    db*da*undulations%values(jx+1,jy+1)
-                zs_ip = zs_ip + undul_ip
-
+                zs_ip = 0.0
+                do jiter=1,2
+                    zs_ip = fis_ip/gravaccel(columnLat, zs_ip)
+                enddo
 
                 ! Local radius
                 int_fields%localRadius(i,c) = locrad

@@ -120,29 +120,30 @@ contains
         enddo
 
 
-        call date_and_time(values=t)
-        t2 = t(5)*3600.0+t(6)*60.0+t(7)*1.0+t(8)*0.001
         ! Perform LTT to compute slant delay. Loop over every non-zenith point in the skyview.
         ! access station's model height and radius
+        call date_and_time(values=t)
+        t2 = t(5)*3600.0+t(6)*60.0+t(7)*1.0+t(8)*0.001
         stModelHeight = station%elp_height - interpolatedFields%z(1,interpolatedFields%nLevels,2)
         stR = interpolatedFields%localRadius(1,2) + station%elp_height
 
         ! Compute slant delays based on skyview
-        ! do i=1,skyview%nPoints-1
+        do i=1,skyview%nPoints-1
 
-        !     zenAngle = degtor(skyview%set(i)%Z)
-        !     psiSat = zenAngle - asin(sin(zenAngle)*stR/skyview%rsat)
+            zenAngle = degtor(skyview%set(i)%Z)
+            psiSat = zenAngle - asin(sin(zenAngle)*stR/skyview%rsat)
 
-        !     iaz = mod(i, skyview%nAzimuths)
-        !     if (iaz==0) iaz=skyview%nAzimuths
+            iaz = mod(i, skyview%nAzimuths)
+            if (iaz==0) iaz=skyview%nAzimuths
 
-        !     call ltt_operator(stModelHeight, skyview%rsat, psiSat, zenAngle, &
-        !         lttDomains(iaz)%nHoriz, lttDomains(iaz)%nVert, lttDomains(iaz)%r, lttDomains(iaz)%N, &
-        !         lttDomains(iaz)%dPsi, lttDomains(iaz)%pTOA, lttDomains(iaz)%zTOA, lttDomains(iaz)%latTOA, &
-        !         delay)
-        !     delays%slant(i) = delay
+            call ltt_operator(stModelHeight, skyview%rsat, psiSat, zenAngle, &
+                lttDomains(iaz)%nHoriz, lttDomains(iaz)%nVert, lttDomains(iaz)%r, lttDomains(iaz)%N, &
+                lttDomains(iaz)%dPsi, lttDomains(iaz)%pTOA, lttDomains(iaz)%zTOA, lttDomains(iaz)%latTOA, &
+                delay)
+            delays%slant(i) = delay
 
-        ! enddo
+        enddo
+
         
         ! Select plane of propagation for zenith delay case..
         ! .. in direction of horizontal component of refraction gradient:
@@ -448,7 +449,8 @@ contains
         dydh(1) = cos(y(3))
         dydh(2) = amult*sin(y(3))/localR
         dydh(3) = -SIN(y(3))*(1.0/localR + dndr) + dndpsi*COS(y(3))/localR/(1+1.0E-6*localN)
-        dydh(4) = 1.0E-6*localN
+        dydh(4) = 1.0E-6*localN        ! Perform LTT to compute slant delay. Loop over every non-zenith point in the skyview.
+        ! access station's model height and radius
 
         return
 

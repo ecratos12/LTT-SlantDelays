@@ -14,6 +14,7 @@
 !
 ! OpenIFS implementation: Lauri Tuppi and Maksym Vasiuta
 ! Implementation of dn/dpsi term, geometrical corrections and condensate fields: Maksym Vasiuta
+! Modularization and refactoring: Maksym Vasiuta
 ! date 24.01.2022
 !
 ! Example run call:

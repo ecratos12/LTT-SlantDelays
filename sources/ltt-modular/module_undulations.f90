@@ -116,11 +116,11 @@ contains
                 dd*da*undulations%values(jx+1,jy) + &
                 db*dc*undulations%values(jx,jy+1) + &
                 db*da*undulations%values(jx+1,jy+1)
-            ! h = H - N
+            ! h = H + N
             ! N: Geoid undulation
             ! H: Orthometric height (MSL height)
             ! h: Height above the reference ellipsoid
-            stationsList%list(i)%elp_height = stationsList%list(i)%MSL_height - localUnd
+            stationsList%list(i)%elp_height = stationsList%list(i)%MSL_height + localUnd
 
             ! print *,stationsList%list(i)%name, localUnd, stationsList%list(i)%elp_height
             ! print *,stationsList%list(i)%lat, ',', stationsList%list(i)%lon, ',', stationsList%list(i)%elp_height 
