@@ -381,7 +381,7 @@ contains
             open(12, file=outFileName, status="new", action="write")
         end if
         write(12,'(A4,3(3X,F23.18),3X,I8,3X,I2)') &
-                station%name,station%lat,station%lon,station%MSL_height,date,forecastTime%hour
+                station%name,station%lat,station%lon,station%elp_height,date,forecastTime%hour
         write(12,'(F11.6)') delays%ZTD
         write(12,'(361(F11.6,3X))') -999.9999,skyview%uniqueAzimuths !###
 

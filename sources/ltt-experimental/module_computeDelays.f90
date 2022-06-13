@@ -96,7 +96,7 @@ contains
         ! Define ray tracer domain of each projection plane:
         do iaz=1,skyview%nAzimuths
 
-            ! define grid size: angular separation, number of vertical levels and horizontal columns
+            ! define grid: angular separation, number of vertical levels and horizontal columns
             lttDomains(iaz)%dPsi = degtor(domain%deltaLon)
             lttDomains(iaz)%nHoriz = pathProjections(1)%nColumns
             lttDomains(iaz)%nVert = N%nLevels
@@ -124,8 +124,8 @@ contains
         ! access station's model height and radius
         call date_and_time(values=t)
         t2 = t(5)*3600.0+t(6)*60.0+t(7)*1.0+t(8)*0.001
-        stModelHeight = station%MSL_height - interpolatedFields%z(1,interpolatedFields%nLevels,2)
-        stR = interpolatedFields%localRadius(1,2) + station%MSL_height
+        stModelHeight = station%elp_height - interpolatedFields%z(1,interpolatedFields%nLevels,2)
+        stR = interpolatedFields%localRadius(1,2) + station%elp_height
 
         ! Compute slant delays based on skyview
         do i=1,skyview%nPoints-1
@@ -144,10 +144,20 @@ contains
 
         enddo
 
+        
+        ! Select plane of propagation for zenith delay case..
+        ! .. in direction of horizontal component of refraction gradient:
+        ! dN/dx = (Neast - Nwest)/(2*dPsi), dN/dy = (Nnorth - Nsouth)/(2*dPsi)
+        ! (approximately)
+        azZen = atan2(lttDomains(360)%n(1,3) - lttDomains(360)%n(1,1),&
+                      lttDomains(90)%n(1,3) - lttDomains(90)%n(1,1))
+        azZen = 90 - rtodeg(azZen)
+        if (azZen < 1.0) azZen = azZen+360.0
+        iaz = floor(azZen)
+
         ! Compute zenith delay
         psiSat = 0.0
         zenAngle = 0.0
-        iaz = 1 ! arbitary azimuth (==1.0 deg)
         call ltt_operator(stModelHeight, skyview%rsat, psiSat, zenAngle, &
             lttDomains(iaz)%nHoriz, lttDomains(iaz)%nVert, lttDomains(iaz)%r, lttDomains(iaz)%N, &
             lttDomains(iaz)%dPsi, lttDomains(iaz)%pTOA, lttDomains(iaz)%zTOA, lttDomains(iaz)%latTOA, &
@@ -431,11 +441,9 @@ contains
         dndr = -1.0E-6*kval*localN
 
         ! calculate the local tangent gradient of n
-        if (k==1) then
-            dndpsi = 1.0E-6*hwt1*(N(i,kp1) - N(i,k))/dPsi
-        else
-            dndpsi = 1.0E-6*(hwt1*(N(i,kp1)-N(i,k)) + hwt2*(N(i,k)-N(i,k-1)))/dPsi
-        endif
+        N_frw = N(i,k+1)*exp(-log(N(i,k+1)/N(i+1,k+1))*(localR-r(i,k+1))/(r(i+1,k+1)-r(i,k+1)))
+        N_bkw = N(i,k)*exp(-log(N(i,k)/N(i+1,k))*(localR-r(i,k))/(r(i+1,k)-r(i,k)))
+        dndpsi = 1.0E-6*(N_frw - N_bkw)/dPsi
 
         ! compute derivatives for ray-tracing equations
         dydh(1) = cos(y(3))
