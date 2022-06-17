@@ -115,7 +115,7 @@ contains
             ! set upper bourdary condition, where modeled atmosphere ends
             lttDomains(iaz)%pTOA = 1.0 ! Pa
             lttDomains(iaz)%zTOA = interpolatedFields%z(iaz,1,2)
-            lttDomains(iaz)%latTOA = station%lat
+            lttDomains(iaz)%latTOA = degtor(station%lat)
 
         enddo
 
@@ -127,22 +127,22 @@ contains
         stModelHeight = station%MSL_height - interpolatedFields%z(1,interpolatedFields%nLevels,2)
         stR = interpolatedFields%localRadius(1,2) + station%MSL_height
 
-        ! Compute slant delays based on skyview
-        do i=1,skyview%nPoints-1
+        ! ! Compute slant delays based on skyview
+        ! do i=1,skyview%nPoints-1
 
-            zenAngle = degtor(skyview%set(i)%Z)
-            psiSat = zenAngle - asin(sin(zenAngle)*stR/skyview%rsat)
+        !     zenAngle = degtor(skyview%set(i)%Z)
+        !     psiSat = zenAngle - asin(sin(zenAngle)*stR/skyview%rsat)
 
-            iaz = mod(i, skyview%nAzimuths)
-            if (iaz==0) iaz=skyview%nAzimuths
+        !     iaz = mod(i, skyview%nAzimuths)
+        !     if (iaz==0) iaz=skyview%nAzimuths
 
-            call ltt_operator(stModelHeight, skyview%rsat, psiSat, zenAngle, &
-                lttDomains(iaz)%nHoriz, lttDomains(iaz)%nVert, lttDomains(iaz)%r, lttDomains(iaz)%N, &
-                lttDomains(iaz)%dPsi, lttDomains(iaz)%pTOA, lttDomains(iaz)%zTOA, lttDomains(iaz)%latTOA, &
-                delay)
-            delays%slant(i) = delay
+        !     call ltt_operator(stModelHeight, skyview%rsat, psiSat, zenAngle, &
+        !         lttDomains(iaz)%nHoriz, lttDomains(iaz)%nVert, lttDomains(iaz)%r, lttDomains(iaz)%N, &
+        !         lttDomains(iaz)%dPsi, lttDomains(iaz)%pTOA, lttDomains(iaz)%zTOA, lttDomains(iaz)%latTOA, &
+        !         delay)
+        !     delays%slant(i) = delay
 
-        enddo
+        ! enddo
 
         ! Compute zenith delay
         psiSat = 0.0
@@ -331,7 +331,7 @@ contains
 
                 enddo
 
-                ! if (iray==1) print *, ilev+1,y(1)+rSt,y(2),y(3),y(4)
+                if (iray==1) print *, ilev+1,y(1)+rSt,y(2),y(3),y(4)
 
             enddo
 
