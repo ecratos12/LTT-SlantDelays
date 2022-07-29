@@ -23,9 +23,7 @@ contains
         type(Path2DType), intent(in out) :: path
 
         integer i
-        double precision :: rcurv, de,dn, dlat,dlon
-
-        double precision, parameter :: rceq = 6378137.0
+        double precision :: clat0, slat0, sa, ca, ccolat
 
         allocate(path%latsList(path%nColumns), path%lonsList(path%nColumns))
         path%station = station
@@ -33,23 +31,37 @@ contains
         path%latsList(2) = station%lat
         path%lonsList(2) = station%lon
 
-        ! compute ray propagation path
+        ! compute ray propagation path, based on spherical geodesic
+        ca = cosdeg(azimuth)
+        sa = sindeg(azimuth)
+        slat0 = sindeg(station%lat)
+        clat0 = cosdeg(station%lat)
+        do i=1,path%nColumns-2
 
-        call locradius(station%lat, rcurv)
+            ccolat = cosdeg(i*domain%deltaLon)*slat0 + sindeg(i*domain%deltaLon)*clat0*ca
+            path%latsList(i+2) = 90.0 - acosdeg(ccolat)
 
-        do i=3,path%nColumns
-            de = rceq * degtor(domain%deltaLon) * sindeg(azimuth)
-            dn = rceq * degtor(domain%deltaLon) * cosdeg(azimuth)
-            dlat = rtodeg(dn/rcurv)
-            dlon = rtodeg(de/rcurv/cosdeg(path%latsList(i-1)))
-            path%latsList(i) = path%latsList(i-1) + dlat
-            path%lonsList(i) = path%lonsList(i-1) + dlon
-        end do
+            ! not secure; need to rework sometimes
+            if (azimuth==180.0 .or. azimuth==360.0) then 
+                path%lonsList(i+2) = station%lon
+                cycle
+            endif
+
+            if (azimuth < 180.0) then ! towards east
+                path%lonsList(i+2) = station%lon + acosdeg((cosdeg(i*domain%deltaLon)- &
+                    ccolat*slat0)/clat0/sqrt(1-ccolat**2))
+            else ! towards west
+                path%lonsList(i+2) = station%lon - acosdeg((cosdeg(i*domain%deltaLon)- &
+                    ccolat*slat0)/clat0/sqrt(1-ccolat**2))
+            endif
+
+        enddo
 
         ! compute a backward column
-        dlon = rtodeg(de/rcurv/cosdeg(path%latsList(2)))
-        path%latsList(1) = path%latsList(2) - dlat
-        path%lonsList(1) = path%lonsList(2) - dlon
+        path%latsList(1) = 90.0 - acosdeg(cosdeg(domain%deltaLon)*slat0 - &
+                            sindeg(domain%deltaLon)*clat0*ca)
+        path%lonsList(1) = station%lon + asindeg(-sindeg(domain%deltaLon)*sa / &
+                            cosdeg(path%latsList(1)))
 
     end subroutine construct_path2D
 
@@ -342,7 +354,7 @@ contains
         if (includeLWC) then
 
             do p=1,N%nPaths
-                do l=1,N%nLevels
+                do l=1,N%nLevels-1
                     do c=1,N%nColumns
                         N%values(p,l,c) = &
                             ! I term (hydrostatic reftactivity)
@@ -364,7 +376,7 @@ contains
         else
 
             do p=1,N%nPaths
-                do l=1,N%nLevels
+                do l=1,N%nLevels-1
                     do c=1,N%nColumns
                         N%values(p,l,c) = &
                             ! I term (hydrostatic reftactivity)
@@ -380,6 +392,12 @@ contains
             enddo
 
         endif
+
+        do p=1,N%nPaths
+            do c=1,N%nColumns
+                N%values(p,N%nLevels,c) = N%values(p,N%nLevels-1,c)
+            enddo
+        enddo
 
     end subroutine refractivity2D
 

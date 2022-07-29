@@ -19,8 +19,8 @@ module module_computeDelays
         ! The refractivity and radius grid has nVert X nHoriz size
 
         ! Horizontal indexing is according to increase of \psi angle
-        ! 1st horizontal coordinate is \psi = -dPsi (backward column)
-        ! 2nd horizontal coordinate is at station (\psi=0)
+        ! 1st horizontal index is \psi = -dPsi (backward column)
+        ! 2nd horizontal index is at station (\psi=0)
         ! Vertical indexing is from surface to top of atmosphere; 
         ! For example, r(1,2) is surface local radius at station's location
         double precision :: dPsi
@@ -63,6 +63,7 @@ contains
 
         double precision :: t0,t1,t2,t3
         integer, dimension(8) :: t
+        logical :: print_flag
 
 
         call date_and_time(values=t)
@@ -110,6 +111,9 @@ contains
                     lttDomains(iaz)%r(i,j) = interpolatedFields%r(iaz,lttDomains(iaz)%nVert-i+1,j)
                     lttDomains(iaz)%N(i,j) = N%values(iaz,lttDomains(iaz)%nVert-i+1,j)
                 enddo
+                !! TESTING: ignore backward column effect by copying station column data into backward column
+                !lttDomains(iaz)%r(i,1) = lttDomains(iaz)%r(i,2)
+                !lttDomains(iaz)%N(i,1) = lttDomains(iaz)%N(i,2)
             enddo
 
             ! set upper bourdary condition, where modeled atmosphere ends
@@ -121,37 +125,57 @@ contains
 
 
         ! Perform LTT to compute slant delay. Loop over every non-zenith point in the skyview.
-        ! access station's model height and radius
+
+        ! access station's model height
         call date_and_time(values=t)
         t2 = t(5)*3600.0+t(6)*60.0+t(7)*1.0+t(8)*0.001
         stModelHeight = station%MSL_height - interpolatedFields%z(1,interpolatedFields%nLevels,2)
-        stR = interpolatedFields%localRadius(1,2) + station%MSL_height
 
-        ! ! Compute slant delays based on skyview
-        ! do i=1,skyview%nPoints-1
+        print_flag = .false.
 
-        !     zenAngle = degtor(skyview%set(i)%Z)
-        !     psiSat = zenAngle - asin(sin(zenAngle)*stR/skyview%rsat)
+        ! Compute slant delays based on skyview
+        do i=1,skyview%nPoints-1
 
-        !     iaz = mod(i, skyview%nAzimuths)
-        !     if (iaz==0) iaz=skyview%nAzimuths
+            ! get path index corresponding to current direction
+            iaz = mod(i, skyview%nAzimuths)
+            if (iaz==0) iaz=skyview%nAzimuths
 
-        !     call ltt_operator(stModelHeight, skyview%rsat, psiSat, zenAngle, &
-        !         lttDomains(iaz)%nHoriz, lttDomains(iaz)%nVert, lttDomains(iaz)%r, lttDomains(iaz)%N, &
-        !         lttDomains(iaz)%dPsi, lttDomains(iaz)%pTOA, lttDomains(iaz)%zTOA, lttDomains(iaz)%latTOA, &
-        !         delay)
-        !     delays%slant(i) = delay
+            ! get start and finish (satellite) r-psi coordinates
+            ! compute target's psi angle
+            ! target's radius is constant - skyview%rsat
+            stR = interpolatedFields%localRadius(iaz,2) + station%MSL_height
+            zenAngle = degtor(skyview%set(i)%Z)
+            psiSat = zenAngle - asin((stR/skyview%rsat)*sin(zenAngle))
 
-        ! enddo
+            ! execute ray-tracer
+            call ltt_operator(stModelHeight, skyview%rsat, psiSat, zenAngle, &
+                lttDomains(iaz)%nHoriz, lttDomains(iaz)%nVert, lttDomains(iaz)%r, lttDomains(iaz)%N, &
+                lttDomains(iaz)%dPsi, lttDomains(iaz)%pTOA, lttDomains(iaz)%zTOA, lttDomains(iaz)%latTOA, &
+               print_flag, delay)
+            delays%slant(i) = delay
+
+        enddo
+
+
+        ! Select plane of propagation for zenith delay case..
+        ! .. in direction of horizontal component of refraction gradient:
+        ! dN/dx = (Neast - Nwest)/(2*dPsi), dN/dy = (Nnorth - Nsouth)/(2*dPsi)
+        ! (approximately)
+        azZen = atan2(lttDomains(360)%n(1,3) - lttDomains(360)%n(1,1),&
+                      lttDomains(90)%n(1,3) - lttDomains(90)%n(1,1))
+        azZen = 90 - rtodeg(azZen)
+        if (azZen < 1.0) azZen = azZen+360.0
+        iaz = floor(azZen)
 
         ! Compute zenith delay
         psiSat = 0.0
         zenAngle = 0.0
-        iaz = 1 ! arbitary azimuth (==1.0 deg)
+        !iaz = 1 ! arbitary azimuth (==1.0 deg)
+
         call ltt_operator(stModelHeight, skyview%rsat, psiSat, zenAngle, &
             lttDomains(iaz)%nHoriz, lttDomains(iaz)%nVert, lttDomains(iaz)%r, lttDomains(iaz)%N, &
             lttDomains(iaz)%dPsi, lttDomains(iaz)%pTOA, lttDomains(iaz)%zTOA, lttDomains(iaz)%latTOA, &
-            delay)
+            .false., delay)
         delays%ZTD = delay
 
         call date_and_time(values=t)
@@ -178,7 +202,7 @@ contains
 
 
     subroutine ltt_operator(stModelHeight, rSat, psiSat, zenAngleRad, &
-                            nHor, nVert, radius, refrac, dPsi, pTOA, zTOA, latTOA, delay)
+                            nHor, nVert, radius, refrac, dPsi, pTOA, zTOA, latTOA, debug_printing, delay)
         use module_utility
 
         implicit none
@@ -190,12 +214,13 @@ contains
         double precision, dimension(nVert, nHor), intent(in) :: radius, refrac
         double precision, intent(in) :: dPsi
         double precision, intent(in) :: pTOA, zTOA, latTOA
+        logical, intent(in) :: debug_printing
         double precision, intent(out) :: delay
 
         double precision, parameter :: pi=3.14159265359
         integer, parameter :: msplit=10       ! number of differential steps within one model layer
         integer, parameter :: niterations=10  ! number of iterations towards true starting zenith angle
-        double precision, parameter :: zaCorRate = 0.707106781 ! rate of correction while iterating
+        double precision, parameter :: zaCorRate = sqrt(0.5) ! rate of correction while iterating
 
         double precision :: za_start, alpha
         double precision :: psiRay, psiTOA, psiTan !, psiMin, psiMax
@@ -224,6 +249,8 @@ contains
         do iray=1,niterations
 
             amult = 1.0
+
+            if (debug_printing) print *,alpha
             
             za_start = za_start - zaCorRate*alpha
 
@@ -265,20 +292,24 @@ contains
 
                     yt(:) = y(:)
 
-                    call pderivs(nHor, nVert, radius, refrac, dPsi, ilev, psiTan, rSt, amult, y, dydht(:,1))
+                    call pderivs(nHor, nVert, radius, refrac, dPsi, ilev, psiTan, rSt, amult, yt, dydht(:,1))
                     yt(:) = y(:) + dydht(:,1)*h2
 
-                    call pderivs(nHor, nVert, radius, refrac, dPsi, ilev, psiTan, rSt, amult, y, dydht(:,2))
+                    call pderivs(nHor, nVert, radius, refrac, dPsi, ilev, psiTan, rSt, amult, yt, dydht(:,2))
                     yt(:) = y(:) + dydht(:,2)*h2
 
-                    call pderivs(nHor, nVert, radius, refrac, dPsi, ilev, psiTan, rSt, amult, y, dydht(:,3))
+                    call pderivs(nHor, nVert, radius, refrac, dPsi, ilev, psiTan, rSt, amult, yt, dydht(:,3))
                     yt(:) = y(:) + dydht(:,3)*h
 
-                    call pderivs(nHor, nVert, radius, refrac, dPsi, ilev, psiTan, rSt, amult, y, dydht(:,4))
+                    call pderivs(nHor, nVert, radius, refrac, dPsi, ilev, psiTan, rSt, amult, yt, dydht(:,4))
 
                     dydh(:) = (dydht(:,1)+dydht(:,4)+2.0*(dydht(:,2)+dydht(:,3)))/6.0
                     yt(:) = y(:) + dydh(:)*h
-                    
+
+                    if (debug_printing) then
+                        if (iray==2) print *, ilev+1, j, dydh
+                    end if                    
+
                     ! check the radius - have we exited the level
                     k = INT((yt(2) + psiTan)/dPsi)+2
                     k = MIN(k,nHor-1)
@@ -331,7 +362,9 @@ contains
 
                 enddo
 
-                if (iray==1) print *, ilev+1,y(1)+rSt,y(2),y(3),y(4)
+                if (debug_printing) then
+                    if (iray==2) print *, ilev+1,y(1)+rSt,y(2),y(3),y(4)
+                end if
 
             enddo
 
@@ -431,16 +464,14 @@ contains
         dndr = -1.0E-6*kval*localN
 
         ! calculate the local tangent gradient of n
-        if (k==1) then
-            dndpsi = 1.0E-6*hwt1*(N(i,kp1) - N(i,k))/dPsi
-        else
-            dndpsi = 1.0E-6*(hwt1*(N(i,kp1)-N(i,k)) + hwt2*(N(i,k)-N(i,k-1)))/dPsi
-        endif
+        N_frw = N(i,k+1)*exp(-log(N(i,k+1)/N(i+1,k+1))*(localR-r(i,k+1))/(r(i+1,k+1)-r(i,k+1)))
+        N_bkw = N(i,k)*exp(-log(N(i,k)/N(i+1,k))*(localR-r(i,k))/(r(i+1,k)-r(i,k)))
+        dndpsi = 1.0E-6*(N_frw - N_bkw)/dPsi
 
         ! compute derivatives for ray-tracing equations
         dydh(1) = cos(y(3))
         dydh(2) = amult*sin(y(3))/localR
-        dydh(3) = -SIN(y(3))*(1.0/localR + dndr) + dndpsi*COS(y(3))/localR/(1+1.0E-6*localN)
+        dydh(3) = -SIN(y(3))*(1.0/localR + dndr) + dndpsi*COS(y(3))/localR
         dydh(4) = 1.0E-6*localN
 
         return

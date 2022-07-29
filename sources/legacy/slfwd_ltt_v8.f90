@@ -105,13 +105,13 @@ use eccodes
   IMPLICIT NONE
 
 ! Definitions for the time (to be read from the command line)
-  CHARACTER(LEN=90) :: commandline
+  CHARACTER(LEN=240) :: commandline
   INTEGER :: year_it, month_it, day_it, hour_it, fclen
   INTEGER :: year_vt, month_vt, day_vt, hour_vt
 
 ! Definitions for the directories and file names
-  CHARACTER(LEN=90) :: gribdir, resdir
-  CHARACTER(LEN=90) :: gfname
+  CHARACTER(LEN=150) :: gribdir, resdir
+  CHARACTER(LEN=150) :: gfname
   CHARACTER(LEN=10) :: ccyc
   CHARACTER(LEN=2) :: fcid
 
@@ -144,7 +144,7 @@ use eccodes
   CHARACTER(LEN=3) :: expid
   REAL, PARAMETER :: rceq=6378137.0
 
-  character(len=90) :: stationfile, ycoordsfile
+  character(len=150) :: stationfile, ycoordsfile
   character(len=4),dimension(:),allocatable :: stations
   real,dimension(:),allocatable :: longitudes, latitudes, height, m_lats
   character(len=25) :: outfile1, outfile2
@@ -195,8 +195,9 @@ use eccodes
   read(end_station,*) end_station_i
   print*,' ... done'
   ierr=0
-  !stationfile='LTT_conf_files/stationCoordinates_extd.txt'
-  stationfile='LTT_conf_files/stationCoordinates.txt'
+  stationfile='LTT_conf_files/stationCoordinates_extd.txt'
+  !stationfile='LTT_conf_files/stationCoordinates.txt'
+	!stationfile='LTT_conf_files/stationCoordinates_test.txt'
   if (resolution=='t639') then
     ycoordsfile='LTT_conf_files/lats_t639.txt'
   elseif (resolution=='t1279') then
@@ -431,7 +432,7 @@ CONTAINS
 ! 7. Memory is freed, and the file closed.
 
   subroutine getDomain2(gribdir,gfname,nx,ny,nlev,dlon,dlat,ierr)
-    CHARACTER(LEN=90) :: gribdir, gfname
+    CHARACTER(LEN=110) :: gribdir, gfname
     character(len=110) :: filename
     INTEGER :: nx, ny, nlev
     REAL :: west, south, east, north, dlon, dlat
@@ -473,8 +474,8 @@ CONTAINS
     call codes_get(igrib(1),'longitudeOfFirstGridPointInDegrees',west)
     call codes_get(igrib(1),'longitudeOfLastGridPointInDegrees',east)
 ! 6.
-    dlon  = (east - west)/real(nx)!-1)
-    dlat  = (north-south)/real(ny)!-1)
+    dlon = 360./real(nx)
+    dlat = 180./real(ny)
 ! 7.
     do n=1,messages
       call codes_release(igrib(n))
@@ -557,7 +558,7 @@ CONTAINS
 ! 7. Memory is freed, and the file closed.
 
   subroutine getFields2(gribdir,gfname,resolution,nx,ny,nlev,afull,bfull,fis_bg,lnps_bg,t_bg,q_bg, ierr)
-    CHARACTER(LEN=90) :: gribdir, gfname
+    CHARACTER(LEN=150) :: gribdir, gfname
     character(len=5) :: resolution
     character(len=110) filename
     INTEGER :: nx, ny, nlev, paramId
@@ -570,7 +571,7 @@ CONTAINS
     INTEGER :: jx, jy, jz
 
     integer :: rfile,iret,n,i,nb_values,messages,level
-    character(len=90) :: coordsfile
+    character(len=150) :: coordsfile
     integer,dimension(:),allocatable :: igrib
     real :: avgz
     logical :: switch=.false.
@@ -723,7 +724,7 @@ CONTAINS
 ! space so it is omitted.
 
   subroutine read_vert_coords(coordsfile,nlev,coords)
-    character(len=90) :: coordsfile
+    character(len=150) :: coordsfile
     integer :: nlev
     real,dimension(3,nlev+1) :: coords
     ! real,dimension(3,nlev+1) :: coords2
@@ -747,7 +748,7 @@ CONTAINS
 ! then read the latitudes line by line.
 
   subroutine read_y_coords(ycoordsfile,nlats,lats)
-    character(len=90) :: ycoordsfile
+    character(len=150) :: ycoordsfile
     integer :: nlines=0, ierr, io, nlats
     real,dimension(:),allocatable :: lats
     open (1, file = ycoordsfile)
@@ -968,7 +969,7 @@ CONTAINS
     integer :: iazi
     real,dimension(nobs) :: zlat, zlon, zhei, zstd
     character(len=140) :: fname_out
-    character(len=90) :: resdir
+    character(len=150) :: resdir
     character(len=25) :: outfile
     real,dimension(iazi) :: zstd_a
     integer :: counter,i
@@ -1903,7 +1904,7 @@ CONTAINS
 
           ENDDO  ! complete path thru ith layer
 
-!         if (iray == 2) write (6,*) i+1,rtan+y(1),y(2),y(3)
+!        if (iray == 1) print *, i+1,rtan+y(1),y(2),y(3),y(4)
 	 
 	 
        ENDDO  ! i the layers
