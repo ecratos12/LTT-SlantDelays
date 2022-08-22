@@ -467,7 +467,7 @@ contains
         dndr = -1.0E-6*kval*localN
 
         ! calculate the local tangent gradient of n
-        if (preciseGradients == .false.) then
+        if (preciseGradients .eqv. .false.) then
             ! dn/dpsi; dr=const is not guaranted
             if (k/=1) then
                 dndpsi = 1.0E-6*(hwt1*(N(i,kp1)-N(i,k)) + hwt2*(N(i,k)-N(i,k-1)))/dPsi
