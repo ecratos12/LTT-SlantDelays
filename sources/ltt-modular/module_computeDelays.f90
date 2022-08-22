@@ -470,10 +470,9 @@ contains
         if (preciseGradients == .false.) then
             ! dn/dpsi; dr=const is not guaranted
             if (k/=1) then
-                dndpsi = 1.0E-6*((hwt1-0.5)*(N(ilev,k)-N(ilev,k-1)) &
-                            + (hwt2+0.5)*(N(ilev,kp1)-N(ilev,k)))/dPsi
+                dndpsi = 1.0E-6*(hwt1*(N(i,kp1)-N(i,k)) + hwt2*(N(i,k)-N(i,k-1)))/dPsi
             else
-                dndpsi = 1.0E-6*(N(ilev,kp1)-N(ilev,k))/dPsi
+                dndpsi = 1.0E-6*hwt1*(N(i,kp1) - N(i,k))/dPsi
             endif
         else
             N_frw = N(i,k+1)*exp(-log(N(i,k+1)/N(i+1,k+1))*(localR-r(i,k+1))/(r(i+1,k+1)-r(i,k+1)))
