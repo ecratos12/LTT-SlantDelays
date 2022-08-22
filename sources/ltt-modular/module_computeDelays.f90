@@ -440,6 +440,9 @@ contains
         double precision :: kval, localN, localR
         double precision :: dndr, dndpsi
 
+        logical :: preciseGradients
+        preciseGradients = .false.
+
         localR = y(1)+rSt
 
         ! column index
@@ -464,9 +467,19 @@ contains
         dndr = -1.0E-6*kval*localN
 
         ! calculate the local tangent gradient of n
-        N_frw = N(i,k+1)*exp(-log(N(i,k+1)/N(i+1,k+1))*(localR-r(i,k+1))/(r(i+1,k+1)-r(i,k+1)))
-        N_bkw = N(i,k)*exp(-log(N(i,k)/N(i+1,k))*(localR-r(i,k))/(r(i+1,k)-r(i,k)))
-        dndpsi = 1.0E-6*(N_frw - N_bkw)/dPsi
+        if (preciseGradients == .false.) then
+            ! dn/dpsi; dr=const is not guaranted
+            if (k/=1) then
+                dndpsi = 1.0E-6*((hwt1-0.5)*(N(ilev,k)-N(ilev,k-1)) &
+                            + (hwt2+0.5)*(N(ilev,kp1)-N(ilev,k)))/dPsi
+            else
+                dndpsi = 1.0E-6*(N(ilev,kp1)-N(ilev,k))/dPsi
+            endif
+        else
+            N_frw = N(i,k+1)*exp(-log(N(i,k+1)/N(i+1,k+1))*(localR-r(i,k+1))/(r(i+1,k+1)-r(i,k+1)))
+            N_bkw = N(i,k)*exp(-log(N(i,k)/N(i+1,k))*(localR-r(i,k))/(r(i+1,k)-r(i,k)))
+            dndpsi = 1.0E-6*(N_frw - N_bkw)/dPsi
+        endif
 
         ! compute derivatives for ray-tracing equations
         dydh(1) = cos(y(3))
