@@ -98,6 +98,16 @@ contains
     end function gravaccel
 
 
+    double precision function gravaccelMSL(helmertH)
+        implicit none
+        double precision :: helmertH
+        double precision, parameter :: g = 9.80263
+
+        gravaccelMSL = g
+
+    end function gravaccelMSL
+        
+
     ! Converts geopotential (=dynamic) height "gpH" [m] to orthometric height "gpH2ortH" [m]
     ! using the formula by meteorologist (Kraus, 2004), 
     ! whose formula inherits an approximation approach

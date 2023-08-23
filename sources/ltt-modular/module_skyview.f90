@@ -2,21 +2,26 @@ module module_skyview
 
 contains
 
-    subroutine constructSkyview(nZen, nAzi, rsat, skyview)
-        use module_data_types, only: SkyPointType, SkyDirectionsDataType
+    subroutine constructSkyview(parameters, rsat, skyview)
+        use module_data_types, only: parametersType, SkyPointType, SkyDirectionsDataType
 
         implicit none
-        integer, intent(in) :: nZen, nAzi
+        type(parametersType), intent(in) :: parameters
         double precision, intent(in) :: rsat
         type(SkyDirectionsDataType), intent(out) :: skyview
 
         integer :: i,ia,iz
-        double precision :: dZen = 1.0, dAzi = 1.0
+        integer :: nZen, nAzi
+        double precision :: dZen = 1.0
+
+        nZen = floor(parameters%zenAngleLimit_deg / dZen)
+        nAzi = floor(360.0 / parameters%dAzimuth_deg)
 
         ! distance of satellite from centre of the Earth (in m)
         ! approximate, and assuming curcular orbit
         skyview%rsat = rsat
 
+        ! make zenith angles set
         allocate(skyview%uniqueZenAngles(nZen))
         do i=1,nZen
             skyview%uniqueZenAngles(i) = real(i)*dZen
@@ -40,12 +45,14 @@ contains
         !     skyview%uniqueZenAngles(i+nZen1+nZen2) = skyview%uniqueZenAngles(nZen1+nZen2) + i*dZen3
         ! enddo
 
+        ! make skyview points set 
         skyview%nPoints = nZen*nAzi + 1
         skyview%nAzimuths = nAzi
 
+        ! make azimuth angles set
         allocate(skyview%uniqueAzimuths(nAzi))
         do i=1,nAzi
-            skyview%uniqueAzimuths(i) = real(i)*dAzi
+            skyview%uniqueAzimuths(i) = real(i) * parameters%dAzimuth_deg
         enddo
 
         allocate(skyview%set(skyview%nPoints))

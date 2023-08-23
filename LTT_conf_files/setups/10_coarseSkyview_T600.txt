@@ -1,0 +1,7 @@
+startStation        1
+endStation          256
+resolution          t639
+dAzimuth_deg        5.0
+zenAngleLimit_deg   85.0
+clwc                off
+use_MSL_heights     off

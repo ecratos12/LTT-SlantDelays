@@ -1,19 +1,40 @@
 
 module module_data_types
 
+    ! "argumentsType" represents LTT program arguments
+    type, public :: argumentsType
+
+        ! setupFile: input parameters for LTT operator
+        ! inputFileName: grib-file with weather data and domain
+        ! outputFileDir: directory with computed LTT slant delays
+
+        character(len=:), allocatable :: setupFile
+        character(len=:), allocatable :: inputFileName
+        character(len=:), allocatable :: inputFileDir
+        character(len=:), allocatable :: outputFileDir
+
+    end type argumentsType
+
 
     ! "parametersType" represents essential parameters for LTT operator
     type, public :: parametersType
 
-        ! inputFileName: grib-file with weather data and domain
+        ! [start,end]Station: go through station list only within this range of indexes
+        ! resolution: pre-defined NWP grid resolution (supports only t639, t1279)
+        ! dAzimuth_deg: azimuth angle resolution in skyview
+        ! zenAngleLimit_deg: maximum zenith angle in skyview
+        ! include_clwc: enables liquid water content in refractivity computation
+        ! use_MSL_heights: use MSL heights for stations, if .false. -- use ellipsoid instead
+        ! ltt_args: arguments of LTT program
 
-        character(len=:), allocatable :: inputFileName
-        character(len=4) :: ensembleMemberId
-        character(len=:), allocatable :: inputFileDir
-        character(len=:), allocatable :: outputFileDir
         integer :: startStation
         integer :: endStation
         character(len=:), allocatable :: resolution
+        double precision :: dAzimuth_deg
+        double precision :: zenAngleLimit_deg
+        logical :: include_clwc
+        logical :: use_MSL_heights
+        type(argumentsType) :: ltt_args
 
     end type parametersType
 
@@ -87,8 +108,8 @@ module module_data_types
     ! "weatherBackgroundDataType" stores the NWP model fields from analysis or forecast grib file, given in a certain domain
     type, public :: weatherBackgroundDataType
 
-        ! dimension size are => number of longitudes X number of latitudes X number of vertical levels
-        ! OR => number of longitudes X number of latitudes
+        ! DIMENSION SHAPE IS => number of longitudes X number of latitudes X number of vertical levels
+        ! ALSO => number of longitudes X number of latitudes
 
         integer :: nLon, nLat, nLevels
 
@@ -108,7 +129,7 @@ module module_data_types
 
 
 
-    ! "weatherInterpolatedDataType" stores projection of the NWP model fields onto set of 2-D paths
+    ! "weatherInterpolatedDataType" stores projection of the NWP model fields onto set of 2-D planes
     type, public :: weatherInterpolatedDataType
 
         ! dimension size are => number of azimuths X number of vertical levels+1 X number of path columns
@@ -119,7 +140,7 @@ module module_data_types
 
         integer :: nPaths, nLevels, nColumns
 
-        ! z: geometric or geoid heights of the model levels
+        ! z: geometric heights of the model levels
         ! P: pressure at model levels
         ! T: interpolated atmospheric temperature
         ! Q: interpolated specific humidity
@@ -158,7 +179,7 @@ module module_data_types
 
         ! nColumns: number of columns (default = 120)
         ! First column is in opposite direction from ray propagation, second is at station location
-        ! Third and so on are placed in direction of ray propagation
+        ! Third and so on are placed in direction towards ray propagation
 
         double precision, dimension(:), allocatable :: latsList
         double precision, dimension(:), allocatable :: lonsList
@@ -204,7 +225,7 @@ module module_data_types
 
     type, public :: SkyDelaysDataType
 
-        ! slant: signal slant delays corresponding to SkyDirectionsDataType set
+        ! slant: signal slant delays, array equal in size to SkyDirectionsDataType.set
         ! ZTD: zenith total delay
 
         double precision, dimension(:), allocatable :: slant

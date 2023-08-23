@@ -2,36 +2,28 @@ module module_io
 
 contains
 
-    subroutine read_parameters(parameters)
-        use module_data_types, only: parametersType
+    subroutine read_arguments(arguments)
+        use module_data_types, only: argumentsType
 
         implicit none
-        type(parametersType), intent(in out) :: parameters
+        type(argumentsType), intent(in out) :: arguments
 
-        character(len=:), allocatable :: s_stat, e_stat
         integer n
 
-        ! prove that it is possible to read all arguments
+        ! assure that it is possible to read all arguments
         n = iargc()
-        if (n<7) then
-            write (*, '(A, I1, A)') "Not enough arguments given!  (Needed 7, while only ", n, " has given)"
+        if (n<4) then
+            write (*, '(A, I1, A)') "Not enough arguments given!  (Needed 4, while only ", n, " has given)"
             stop
-        end if 
+        end if
 
-        ! read arguments and fill in "parameters" structure
-        call get_command_argument_Allocated(1, parameters % inputFileName)
-        call get_command_argument          (2, parameters % ensembleMemberId)
-        call get_command_argument_Allocated(3, parameters % inputFileDir)
-        call get_command_argument_Allocated(4, parameters % outputFileDir)
+        ! read arguments and fill in "arguments" structure
+        call get_command_argument_Allocated(1, arguments % setupFile)
+        call get_command_argument_Allocated(2, arguments % inputFileName)
+        call get_command_argument_Allocated(3, arguments % inputFileDir)
+        call get_command_argument_Allocated(4, arguments % outputFileDir)
 
-        call get_command_argument_Allocated(5, s_stat)
-        call get_command_argument_Allocated(6, e_stat)
-        read(s_stat,*) parameters % startStation
-        read(e_stat,*) parameters % endStation
-
-        call get_command_argument_Allocated(7, parameters % resolution)
-
-    end subroutine read_parameters
+    end subroutine read_arguments
 
 
     ! work-around procedure to get command line arguments of unknown length
@@ -47,13 +39,85 @@ contains
     end subroutine get_command_argument_Allocated
 
 
+    subroutine read_parameters(arguments, parameters)
+        use module_data_types, only: parametersType, argumentsType
+
+        implicit none
+        type(argumentsType), intent(in) :: arguments
+        type(parametersType), intent(in out) :: parameters
+        integer :: nlines=0, i, io
+        character(len=64) :: key, value
+
+        ! include program arguments to parameters 
+        parameters%ltt_args = arguments
+
+        open(1, file = trim(arguments%setupFile))
+        do
+            read(1,*,iostat=io)
+
+            if (nlines==0) then
+                if (io/=0) then
+                    print *,'Cannot read the setup file!'
+                    stop
+                endif
+            endif
+
+            if (io/=0) exit
+            nlines = nlines+1
+
+        enddo
+        close(1)
+
+        open(2, file = trim(arguments%setupFile))
+        do i=1,nlines
+            read(2,*) key, value
+            print *, key, 'is ', value
+            if (key == 'startStation') then
+                read(value,*) parameters%startStation
+
+            elseif (key == 'endStation') then
+                read(value,*) parameters%endStation
+
+            elseif (key == 'resolution') then
+                parameters%resolution = value
+
+            elseif (key == 'dAzimuth_deg') then
+                read(value,*) parameters%dAzimuth_deg
+
+            elseif (key == 'zenAngleLimit_deg') then
+                read(value,*) parameters%zenAngleLimit_deg
+
+            elseif (key == 'clwc') then
+                if (value=='on') then
+                    parameters%include_clwc = .true.
+                elseif (value=='off') then
+                    parameters%include_clwc = .false.
+                endif
+
+            elseif (key == 'use_MSL_heights') then
+                if (value=='on') then
+                    parameters%use_MSL_heights = .true.
+                elseif (value=='off') then
+                    parameters%use_MSL_heights = .false.
+                endif
+
+            else
+                print*,'Error! Unknown parameter ',  key
+                stop
+            endif
+        enddo
+        close(2)
+
+    end subroutine read_parameters
+
+
     subroutine read_stations(stations)
         use module_data_types, only: stationType, stationsListType
 
         implicit none
         type(stationsListType), intent(in out) :: stations
 
-        character(len=90) :: file = 'LTT_conf_files/stationCoordinates.txt'
+        character(len=90) :: file = 'LTT_conf_files/stationCoordinates_extd.txt'
         integer :: nlines=0, i, io
 
         open(1, file = trim(file))
@@ -145,13 +209,13 @@ contains
 
         ! Define the time of the analysis and forecast field
         ! analysis from OIFS file name
-        read(parameters%inputFileName(5:8), '(i4)') anTime%year
-        read(parameters%inputFileName(9:10), '(i2)') anTime%month
-        read(parameters%inputFileName(11:12), '(i2)') anTime%day
-        read(parameters%inputFileName(13:14), '(i2)') anTime%hour
+        read(parameters%ltt_args%inputFileName(5:8), '(i4)') anTime%year
+        read(parameters%ltt_args%inputFileName(9:10), '(i2)') anTime%month
+        read(parameters%ltt_args%inputFileName(11:12), '(i2)') anTime%day
+        read(parameters%ltt_args%inputFileName(13:14), '(i2)') anTime%hour
 
         ! forecast time = analysis time + ForeCast LENgth
-        read(parameters%inputFileName(16:18), '(i3)') fclen
+        read(parameters%ltt_args%inputFileName(16:18), '(i3)') fclen
         foTime = anTime
         foTime%hour = foTime%hour + fclen
         do while (foTime%hour >= 24)
@@ -174,7 +238,7 @@ contains
 
         ! Retrieve the model domain parameters from the given OpenIFS GRIB-file.
         ! 1. Read OpenIFS file, count messages inside.
-        gribFileName = trim(parameters%inputFileDir)//trim(parameters%inputFileName)
+        gribFileName = trim(parameters%ltt_args%inputFileDir)//trim(parameters%ltt_args%inputFileName)
         call codes_open_file(rfile, gribFileName, 'r')
         call codes_count_in_file(rfile, messages, ierr)
         allocate(igrib(messages+1))
@@ -264,7 +328,7 @@ contains
         fields%clwc=0.0
 
         ! 2. Read OpenIFS file, count messages inside.
-        gribFileName = trim(parameters%inputFileDir)//trim(parameters%inputFileName)
+        gribFileName = trim(parameters%ltt_args%inputFileDir)//trim(parameters%ltt_args%inputFileName)
         call codes_open_file(rfile, gribFileName, 'r')
         call codes_count_in_file(rfile, messages, ierr)
         allocate(igrib(messages+1))
@@ -353,7 +417,10 @@ contains
         character*4 :: eofr='EOR'
         character(len=150) :: outFileName
         character(len=3) :: hour
+        character(len=16) :: lineFormat
         double precision, dimension(skyview%nAzimuths) :: dataPerLine
+
+        write(lineFormat,'("(", I0, "(F11.6,3X))")') skyview%nAzimuths+1
 
         ! check inappropriate values
         do i=1,size(delays%slant)
@@ -366,13 +433,13 @@ contains
             print*,'WARNING: inappropriate value at',i,', Setting to zero.'
         endif
 
-        read(parameters%inputFileName(5:12), '(i8)') date
+        read(parameters%ltt_args%inputFileName(5:12), '(i8)') date
 
-        read(parameters%inputFileName(16:18), '(i3)') fclen
+        read(parameters%ltt_args%inputFileName(16:18), '(i3)') fclen
         write(hour,'(i3.3)') fclen
-        read(parameters%inputFileName(5:14), '(a10)') outFileName
-        outFileName = trim(outFileName) // '+' // trim(hour) // '_' // parameters%ensembleMemberId // '.dat'
-        outFileName = trim(parameters%outputFileDir)//trim(outFileName)
+        read(parameters%ltt_args%inputFileName(5:14), '(a10)') outFileName
+        outFileName = trim(outFileName) // '+' // trim(hour) // '.dat'
+        outFileName = trim(parameters%ltt_args%outputFileDir)//trim(outFileName)
 
         inquire(file=outFileName, exist=exist)
         if (exist) then
@@ -380,10 +447,16 @@ contains
         else
             open(12, file=outFileName, status="new", action="write")
         end if
-        write(12,'(A4,3(3X,F23.18),3X,I8,3X,I2)') &
-                station%name,station%lat,station%lon,station%MSL_height,date,forecastTime%hour
+
+        if (parameters%use_MSL_heights) then
+            write(12,'(A4,3(3X,F23.18),3X,I8,3X,I2)') &
+                    station%name,station%lat,station%lon,station%MSL_height,date,forecastTime%hour
+        else
+            write(12,'(A4,3(3X,F23.18),3X,I8,3X,I2)') &
+                    station%name,station%lat,station%lon,station%elp_height,date,forecastTime%hour
+        endif
         write(12,'(F11.6)') delays%ZTD
-        write(12,'(361(F11.6,3X))') -999.9999,skyview%uniqueAzimuths !###
+        write(12,lineFormat) -999.9999,skyview%uniqueAzimuths !###
 
         counter=1
         do iz = 1, size(skyview%uniqueZenAngles)
@@ -391,7 +464,7 @@ contains
                 dataPerLine(ia) = delays%slant(counter)
                 counter=counter+1
             enddo
-            write(12,'(361(F11.6,3X))') skyview%uniqueZenAngles(iz), dataPerLine
+            write(12,lineFormat) skyview%uniqueZenAngles(iz), dataPerLine
         enddo
         write(12,'(1X,A4)') eofr
 

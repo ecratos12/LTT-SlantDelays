@@ -199,10 +199,9 @@ contains
                     db*dc*bgr_fields%fis(jx,jy+1) + &
                     db*da*bgr_fields%fis(jx+1,jy+1)
 
-                ! Surface geometric height (above the reference ellipsoid)
                 zs_ip = 0.0
                 do jiter=1,2
-                    zs_ip = fis_ip/gravaccel(columnLat, zs_ip)
+                    zs_ip = fis_ip/gravaccelMSL(zs_ip)
                 enddo
 
                 ! Local radius
@@ -277,10 +276,10 @@ contains
                     zhu = zhl
                     do jiter=1,2
                         dlnp = LOG(pf/phl)
-                        dz   = -(Rd*tvm/gravaccel(columnLat,0.5*zhl+0.5*zf))*dlnp
+                        dz   = -(Rd*tvm/gravaccelMSL(0.5*zhl+0.5*zf))*dlnp
                         zf   = zhl+dz
                         dlnp = LOG(phu/phl)
-                        dz   = -(Rd*tvm/gravaccel(columnLat,0.5*zhl+0.5*zhu))*dlnp
+                        dz   = -(Rd*tvm/gravaccelMSL(0.5*zhl+0.5*zhu))*dlnp
                         zhu  = zhl+dz
                     enddo
                 enddo
@@ -299,9 +298,9 @@ contains
       
                       !print*,i
                       if (jiter==1) then
-                        dz=-(Rd*tvm/gravaccel(columnLat,0.5*int_fields%z(i,ilev+2,c)+0.5*int_fields%z(i,ilev+1,c)))*dlnp
+                        dz=-(Rd*tvm/gravaccelMSL(0.5*int_fields%z(i,ilev+2,c)+0.5*int_fields%z(i,ilev+1,c)))*dlnp
                       else
-                        dz=-(Rd*tvm/gravaccel(columnLat,0.5*int_fields%z(i,ilev+1,c)+0.5*int_fields%z(i,ilev,c)))*dlnp
+                        dz=-(Rd*tvm/gravaccelMSL(0.5*int_fields%z(i,ilev+1,c)+0.5*int_fields%z(i,ilev,c)))*dlnp
                       endif
       
                       ! dz=-(Rd*tvm/gravaccel(columnLat,0.5*int_fields%z(i,ilev+1,c)+0.5*int_fields%z(i,ilev,c)))*dlnp
@@ -333,17 +332,17 @@ contains
     ! Computation is done of all possible paths,
     ! that are emerging from set of unique azimuths in skyview
     ! int_fields and N have the same dimension
-    subroutine refractivity2D(int_fields, N)
+    subroutine refractivity2D(int_fields, include_clwc, N)
         use module_data_types, only: weatherInterpolatedDataType, refractivityDataType
         use module_utility
 
         implicit none
         type(weatherInterpolatedDataType), intent(in) :: int_fields
+        logical, intent(in) :: include_clwc
         type(refractivityDataType), intent(in out) :: N
 
         double precision, PARAMETER :: k1=77.607E-2, k2=70.4E-2, k3=3.739E3, k4=1.45, eps=0.622
         integer :: p,l,c
-        logical, parameter :: includeLWC = .false.
 
         ! interpolated fields and N have the same dimension
         N%nPaths = int_fields%nPaths
@@ -351,7 +350,7 @@ contains
         N%nColumns = int_fields%nColumns
         allocate(N%values(N%nPaths, N%nLevels, N%nColumns))
 
-        if (includeLWC) then
+        if (include_clwc) then
 
             do p=1,N%nPaths
                 do l=1,N%nLevels-1
@@ -393,6 +392,7 @@ contains
 
         endif
 
+        ! surface refractivity = 10m height refractivity
         do p=1,N%nPaths
             do c=1,N%nColumns
                 N%values(p,N%nLevels,c) = N%values(p,N%nLevels-1,c)

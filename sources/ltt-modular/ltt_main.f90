@@ -34,6 +34,7 @@ program ltt_v9
     use module_undulations
 
     implicit none
+    type(argumentsType) :: arguments
     type(parametersType) :: parameters
     type(nwpDomainType) :: oifsDomain
     type(weatherBackgroundDataType) :: oifsFields
@@ -42,16 +43,16 @@ program ltt_v9
     type(dateTimeType) :: analysisTime, forecastTime
     type(undulationsType) :: undulations
 
-    ! Other crutial parameters of LTT operator
+    ! Other (hard-coded) parameters of LTT operator
     !
     ! distance of satellite from centre of the Earth (in m)
     ! finish condition for ray tracer to construct signal path and calculate delay..
     ! ..is r==rsat
     double precision :: rsat=26608293.0
-    ! number of unique zenith and azimuth angles to compute and output the delays
+    ! number of unique zenith angles to compute and output the delays
     ! if one want to make variable zenith angle resolution, ..
-    ! ..provide total number of unique angles here and define them in "constructSkyview" subroutine
-    integer :: nZen=85, nAzi=360
+    ! ..provide total number of angles here and define them in "constructSkyview" subroutine
+    ! integer :: nZen=85
 
     ! Intermediate variables and data
     integer :: ist
@@ -62,16 +63,20 @@ program ltt_v9
     print*,'###### Welcome to using slfwd slant delay operator. ######'
 
     
-    ! 1. Read command line arguments as LTT parameters
-    print*,'Reading the configuration ...'
-    call read_parameters(parameters)
+    ! 1.1 Read command line arguments for LTT program
+    print*,'Reading the arguments ...'
+    call read_arguments(arguments)
+
+    ! 1.2 Read LTT parameters
+    print*,'Reading the setup file ...'
+    call read_parameters(arguments, parameters)
 
     ! 2. Read all observing stations
     print*,'Obtaining list of observing stations ...'
     call read_stations(stations)
 
     ! 3. Read OpenIFS NWP data domain configuration
-    print*,'Reading the GRIB file '//TRIM(parameters%inputFileDir)//TRIM(parameters%inputFileName)//' ...'
+    print*,'Reading the GRIB file '//TRIM(arguments%inputFileDir)//TRIM(arguments%inputFileName)//' ...'
     print*,'Obtaining meta information (grid, model levels, etc.) ...'
     call read_nwpConfiguration(parameters, oifsDomain, analysisTime, forecastTime)
 
@@ -90,7 +95,7 @@ program ltt_v9
     ! The delays are then computed for signals propagating from a virtual GNSS satellite 
     ! placed at certain direction at certain distance rsat from centre of the Earth (in m).
     print*,'Initialize "observations" as a set of sky directions ...'
-    call constructSkyview(nZen, nAzi, rsat, skyview)
+    call constructSkyview(parameters, rsat, skyview)
 
     ! 7. Perform slant delays computation
     ! in directions defined by skyview for every station in selected range

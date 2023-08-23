@@ -7,7 +7,7 @@ module module_computeDelays
     ! originated from centre of the Earth (r=0), and observing station location (r=r_st, \psi=0)
     ! Refractivity field N, physical grounding of propagation, is given as 2-d polar grid
     ! located at corresponding r's and \psi's
-    ! Upper boundary condition of ray tracing is given as r=rTOA.
+    ! Upper boundary limit of ray tracing is given as r=rTOA.
     type, public :: lttDomainType
 
         ! N: refractivity field gridded in 2-d polar coordinates
@@ -60,10 +60,11 @@ contains
         type(lttDomainType), dimension(:), allocatable :: lttDomains
         type(Path2DType), dimension(:), allocatable :: pathProjections
         double precision :: stModelHeight, stR, zenAngle, delay, psiSat, azZen
+        integer :: iazN, iazE
 
         double precision :: t0,t1,t2,t3
         integer, dimension(8) :: t
-        logical :: print_flag
+        logical :: print_flag, include_clwc
 
 
         call date_and_time(values=t)
@@ -91,7 +92,8 @@ contains
 
 
         ! Use projected NWP fields to create refractivity N field
-        call refractivity2D(interpolatedFields, N)
+        include_clwc = parameters%include_clwc
+        call refractivity2D(interpolatedFields, include_clwc, N)
 
 
         ! Define ray tracer domain of each projection plane:
@@ -126,10 +128,14 @@ contains
 
         ! Perform LTT to compute slant delay. Loop over every non-zenith point in the skyview.
 
-        ! access station's model height
+        ! compute station's model height
         call date_and_time(values=t)
         t2 = t(5)*3600.0+t(6)*60.0+t(7)*1.0+t(8)*0.001
-        stModelHeight = station%MSL_height - interpolatedFields%z(1,interpolatedFields%nLevels,2)
+        if (parameters%use_MSL_heights) then
+            stModelHeight = station%MSL_height - interpolatedFields%z(1,interpolatedFields%nLevels,2)
+        else
+            stModelHeight = station%elp_height - interpolatedFields%z(1,interpolatedFields%nLevels,2)
+        endif
 
         print_flag = .false.
 
@@ -143,7 +149,11 @@ contains
             ! get start and finish (satellite) r-psi coordinates
             ! compute target's psi angle
             ! target's radius is constant - skyview%rsat
-            stR = interpolatedFields%localRadius(iaz,2) + station%MSL_height
+            if (parameters%use_MSL_heights) then
+                stR = interpolatedFields%localRadius(iaz,2) + station%MSL_height
+            else
+                stR = interpolatedFields%localRadius(iaz,2) + station%elp_height
+            endif
             zenAngle = degtor(skyview%set(i)%Z)
             psiSat = zenAngle - asin((stR/skyview%rsat)*sin(zenAngle))
 
@@ -151,26 +161,30 @@ contains
             call ltt_operator(stModelHeight, skyview%rsat, psiSat, zenAngle, &
                 lttDomains(iaz)%nHoriz, lttDomains(iaz)%nVert, lttDomains(iaz)%r, lttDomains(iaz)%N, &
                 lttDomains(iaz)%dPsi, lttDomains(iaz)%pTOA, lttDomains(iaz)%zTOA, lttDomains(iaz)%latTOA, &
-               print_flag, delay)
+                print_flag, delay)
             delays%slant(i) = delay
 
         enddo
 
+        ! North = 360 deg (iaz = nAzimuths)
+        ! East = 90 deg (iaz = nAzimuths/4)
+        iazN = skyview%nAzimuths
+        iazE = skyview%nAzimuths/4
 
         ! Select plane of propagation for zenith delay case..
         ! .. in direction of horizontal component of refraction gradient:
         ! dN/dx = (Neast - Nwest)/(2*dPsi), dN/dy = (Nnorth - Nsouth)/(2*dPsi)
         ! (approximately)
-        azZen = atan2(lttDomains(360)%n(1,3) - lttDomains(360)%n(1,1),&
-                      lttDomains(90)%n(1,3) - lttDomains(90)%n(1,1))
+        azZen = atan2(lttDomains(iazN)%n(1,3) - lttDomains(iazN)%n(1,1), &
+                      lttDomains(iazE)%n(1,3) - lttDomains(iazE)%n(1,1))
         azZen = 90 - rtodeg(azZen)
-        if (azZen < 1.0) azZen = azZen+360.0
-        iaz = floor(azZen)
+        if (azZen < parameters%dAzimuth_deg) azZen = azZen+360.0
+        iaz = floor(azZen / parameters%dAzimuth_deg)
 
         ! Compute zenith delay
         psiSat = 0.0
         zenAngle = 0.0
-        !iaz = 1 ! arbitary azimuth (==1.0 deg)
+        !iaz = 1 ! arbitary azimuth (==dAzimuth deg)
 
         call ltt_operator(stModelHeight, skyview%rsat, psiSat, zenAngle, &
             lttDomains(iaz)%nHoriz, lttDomains(iaz)%nVert, lttDomains(iaz)%r, lttDomains(iaz)%N, &
@@ -219,7 +233,7 @@ contains
 
         double precision, parameter :: pi=3.14159265359
         integer, parameter :: msplit=10       ! number of differential steps within one model layer
-        integer, parameter :: niterations=10  ! number of iterations towards true starting zenith angle
+        integer, parameter :: niterations=8   ! number of iterations towards true starting zenith angle
         double precision, parameter :: zaCorRate = sqrt(0.5) ! rate of correction while iterating
 
         double precision :: za_start, alpha
@@ -232,8 +246,8 @@ contains
         double precision :: zDelay_extra, delay_extra, hdc, zf
         double precision :: y(4), yt(4), dydh(4), dydht(4,4)
 
-        double precision :: rad,ref, hwt1,hwt2, amult, h,h2,huse, dr_max,dr_dpsi,rSt,dr, kval
-        integer :: ilev,j,iray,n,ibot,k,kp1
+        double precision :: rad,ref, hwt1,hwt2, amult, h,h2,huse, dr_max,dr_ds,rSt,dr, kval
+        integer :: ilev,j,iray,ibot,k,kp1
 
 
         ! psiMin = -dPsi
@@ -246,11 +260,19 @@ contains
         ! radius = radius of the lowest model level + station height above the lowest model level
         rSt = radius(1,2) + stModelHeight
 
+        ibot=1
+        ! which model levels is the receiver between?
+        do
+            if (rSt < radius(ibot+1,2)) exit
+            ibot = ibot+1
+        enddo
+        if (debug_printing) print *, ibot, rSt, stModelHeight
+
         do iray=1,niterations
 
             amult = 1.0
 
-            if (debug_printing) print *,alpha
+            if (debug_printing) print *, iray, alpha
             
             za_start = za_start - zaCorRate*alpha
 
@@ -260,16 +282,7 @@ contains
             y(3) = za_start  ! theta
             y(4) = 0.0       ! delay
 
-            n=0
-
-            ibot=1
-            ! which model levels is the receiver between?
-            do
-                if (rSt < radius(ibot+1,2)) exit
-                ibot = ibot+1
-            enddo
-
-            ! now integrate ray-path to top of model atmosphere
+            ! integrate ray-path to top of model atmosphere
             do ilev = ibot,nVert-1
 
                 ! estimate the step length
@@ -277,8 +290,9 @@ contains
                 ! k+1 - column index in front of current position y
                 ! h - horizontal step length (in m)
  
-                k = INT((y(2) + psiTan)/dPsi)+2
-                k = MIN(k,nHor)
+                k = int((y(2) + psiTan)/dPsi)+2
+                k = min(k,nHor)
+                k = max(k,1)
                 dr_max = (radius(ilev+1,k) - MAX(radius(ilev,k),rSt))/REAL(msplit)
                 h = dr_max/MAX(COS(y(3)),1.0E-10)
 
@@ -306,13 +320,10 @@ contains
                     dydh(:) = (dydht(:,1)+dydht(:,4)+2.0*(dydht(:,2)+dydht(:,3)))/6.0
                     yt(:) = y(:) + dydh(:)*h
 
-                    if (debug_printing) then
-                        if (iray==2) print *, ilev+1, j, dydh
-                    end if                    
-
                     ! check the radius - have we exited the level
-                    k = INT((yt(2) + psiTan)/dPsi)+2
-                    k = MIN(k,nHor-1)
+                    k = int((yt(2) + psiTan)/dPsi)+2
+                    k = min(k,nHor-1)
+                    k = max(k,1)
                     kp1 = k+1
 
                     ! horizontal weighting factor
@@ -326,28 +337,42 @@ contains
                     if (j==msplit) then
                         ! dr_dpsi = 0.0
                         ! if (yt(2) < psiMax .AND. yt(2) > psiMin) &
-                        dr_dpsi = (radius(ilev+1,kp1)-radius(ilev+1,k))/dPsi
 
-                        huse = h - (yt(1)+rSt-rad)/(dydh(1) - dr_dpsi*dydh(2))
+                        ! dr/ds = dr/dpsi * dpsi/ds
+                        dr_ds = dydh(1) - (radius(ilev+1,kp1)-radius(ilev+1,k))/dPsi*dydh(2)
+
+                        huse = h - (yt(1)+rSt-rad)/dr_ds
+                        if (dr_ds < 0) &
+                        print *, 'Orography change leads to ray path fall into lower atmospheric levels, dz/ds=', dr_ds
+
+                        if (debug_printing) print *, ilev, huse, yt(1)+rSt-rad, dr_ds
                     else
                         huse = h
                     endif
 
                     ! update the position vector
                     y(:) = y(:) + dydh(:)*huse
-
+                    ! 
+                    if (y(1) < 0) then
+                        print *, 'Collision with the ground!!! Set slant delay to 0'
+                        delay = 0.0
+                        return
+                    endif
 
                     ! output the refrac etc. at the model level.
                     if (j==msplit .and. iray>1) then
                         yt(:) = y(:)
 	     	    
-                        k = INT((yt(2) + psiTan)/dPsi)+2
-                        k = MIN(k,nHor-1)
-                        kp1 = k+1       
+                        k = int((yt(2) + psiTan)/dPsi)+2
+                        k = min(k,nHor-1)
+                        k = max(k,1)
+                        kp1 = k+1
                 
                         ! horizontal weighting factor
                         hwt1 = (REAL(k-1)*dPsi - (yt(2)+psiTan))/dPsi
                         hwt2 = 1.0 - hwt1
+
+                        if (debug_printing) print *, ilev+1, k, yt
            
                         rad = hwt1*radius(ilev+1,k)+hwt2*radius(ilev+1,kp1)
                         ref = hwt1*refrac(ilev+1,k)+hwt2*refrac(ilev+1,kp1)
@@ -361,10 +386,6 @@ contains
                     endif
 
                 enddo
-
-                if (debug_printing) then
-                    if (iray==2) print *, ilev+1,y(1)+rSt,y(2),y(3),y(4)
-                end if
 
             enddo
 
@@ -408,11 +429,13 @@ contains
 
         ! calculate total slant delay as average value from latest iterations, 
         ! assuming total slant delay values converge and oscillate near an optimum value.
-        delay = 0.0
-        do j=0,3
-            delay = delay + delays_tmp(niterations-j)
-        enddo
-        delay = delay / 4.0
+        !delay = 0.0
+        !do j=0,3
+        !    delay = delay + delays_tmp(niterations-j)
+        !enddo
+        !delay = delay / 4.0
+
+        delay = delays_tmp(niterations)
 
         return
 
@@ -446,9 +469,10 @@ contains
         localR = y(1)+rSt
 
         ! column index
-        k = INT((y(2) + psiTan)/dPsi)+2
-        k = MIN(k,nHor)
-        kp1 = MIN(k+1,nHor)
+        k = int((y(2) + psiTan)/dPsi)+2
+        k = min(k,nHor)
+        k = max(k,1)
+        kp1 = min(k+1,nHor)
 
         ! horizontal weighting factor
         hwt1 = (REAL(k-1)*dPsi - (y(2)+psiTan))/dPsi   
