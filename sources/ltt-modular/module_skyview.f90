@@ -52,7 +52,7 @@ contains
         ! make azimuth angles set
         allocate(skyview%uniqueAzimuths(nAzi))
         do i=1,nAzi
-            skyview%uniqueAzimuths(i) = real(i) * parameters%dAzimuth_deg
+            skyview%uniqueAzimuths(i) = real(i-1) * parameters%dAzimuth_deg
         enddo
 
         allocate(skyview%set(skyview%nPoints))

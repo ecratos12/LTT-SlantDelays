@@ -42,7 +42,7 @@ contains
             path%latsList(i+2) = 90.0 - acosdeg(ccolat)
 
             ! not secure; need to rework sometimes
-            if (azimuth==180.0 .or. azimuth==360.0) then 
+            if (azimuth==180.0 .or. azimuth==0.0) then 
                 path%lonsList(i+2) = station%lon
                 cycle
             endif
@@ -113,6 +113,7 @@ contains
         allocate(int_fields%Q(int_fields%nPaths, int_fields%nLevels, int_fields%nColumns))
         allocate(int_fields%r(int_fields%nPaths, int_fields%nLevels, int_fields%nColumns))
         allocate(int_fields%clwc(int_fields%nPaths, int_fields%nLevels, int_fields%nColumns))
+        allocate(int_fields%ciwc(int_fields%nPaths, int_fields%nLevels, int_fields%nColumns))
         allocate(int_fields%localRadius(int_fields%nPaths, int_fields%nColumns))
 
         ! iterate paths
@@ -137,15 +138,15 @@ contains
 
                 ! find the grid point indeces corresponding to the geographical coordinates
                 if (columnLon < 0.0) then
-                    gridx = (columnLon + 360.0)/domain%deltaLon
+                    gridx = (columnLon + 360.0)/domain%deltaLon + 1.0
                 else
-                    gridx = columnLon/domain%deltaLon
+                    gridx = columnLon/domain%deltaLon + 1.0
                 endif
 
                 ilat = 1
                 do
                     if (domain%latsList(ilat) < columnLat) exit
-                    if (ilat==domain%gridNLat) exit  ! watch out for grid ending before south pole
+                    if (ilat==bgr_fields%nLat) exit  ! watch out for grid ending before south pole
                     ilat = ilat+1
                 enddo
                 if (ilat==1) ilat = 2    ! watch out for grid ending before north pole
@@ -153,7 +154,7 @@ contains
                                     (domain%latsList(ilat-1) - domain%latsList(ilat))
                 
                 ! ingore columns beyond the grid domain
-                if (gridy<0.0 .or. gridy>float(domain%gridNLat) .or. gridx<0.0 .or. gridx>float(domain%gridNLon)) then
+                if (gridy<0.0 .or. gridy>float(bgr_fields%nLat) .or. gridx<0.0 .or. gridx>float(bgr_fields%nLon)) then
                     print *,'The projection goes beyond the grid domain!', &
                         '   azimuth=', skyview%uniqueAzimuths(i), '   columnNumber=', c, 'gridx,gridy', gridx,gridy
                     if (c==1) then
@@ -230,6 +231,12 @@ contains
                         db*dc*bgr_fields%clwc(jx,jy+1,ilev) + &
                         db*da*bgr_fields%clwc(jx+1,jy+1,ilev)
 
+                    int_fields%ciwc(i,ilev,c) = &
+                        dd*dc*bgr_fields%ciwc(jx,jy,ilev) + &
+                        dd*da*bgr_fields%ciwc(jx+1,jy,ilev) + &
+                        db*dc*bgr_fields%ciwc(jx,jy+1,ilev) + &
+                        db*da*bgr_fields%ciwc(jx+1,jy+1,ilev)
+
                     int_fields%Q(i,ilev,c) = &
                         dd*dc*bgr_fields%Q(jx,jy,ilev) + &
                         dd*da*bgr_fields%Q(jx+1,jy,ilev) + &
@@ -237,17 +244,19 @@ contains
                         db*da*bgr_fields%Q(jx+1,jy+1,ilev)
                 enddo
 
-                ! convert water content units from [kg/kg] to [g/m3]
+                ! convert water and ice content units from [kg/kg] to [g/m3]
                 ! See: https://nwp-saf.eumetsat.int/site/download/documentation/rtm/docs_rttov12/rttov_gas_cloud_aerosol_units.pdf
                 do ilev=1,domain%nLevels
                     mult = 1000*int_fields%P(i,ilev,c)/int_fields%T(i,ilev,c)/ &
                             (Rd * (1+(1-eps)/eps*int_fields%Q(i,ilev,c)))
 
                     int_fields%clwc(i,ilev,c) = int_fields%clwc(i,ilev,c) * mult
+                    int_fields%ciwc(i,ilev,c) = int_fields%ciwc(i,ilev,c) * mult
                 enddo
 
                 ! Surface water content = 10m water content
                 int_fields%clwc(i,domain%nLevels+1,c) = int_fields%clwc(i,domain%nLevels,c)
+                int_fields%ciwc(i,domain%nLevels+1,c) = int_fields%ciwc(i,domain%nLevels,c)
 
                 ! Surface specific humidity = 10m specific humidity
                 int_fields%Q(i,domain%nLevels+1,c) = int_fields%Q(i,domain%nLevels,c)
@@ -332,13 +341,13 @@ contains
     ! Computation is done of all possible paths,
     ! that are emerging from set of unique azimuths in skyview
     ! int_fields and N have the same dimension
-    subroutine refractivity2D(int_fields, include_clwc, N)
+    subroutine refractivity2D(int_fields, include_clwc, include_ciwc, N)
         use module_data_types, only: weatherInterpolatedDataType, refractivityDataType
         use module_utility
 
         implicit none
         type(weatherInterpolatedDataType), intent(in) :: int_fields
-        logical, intent(in) :: include_clwc
+        logical, intent(in) :: include_clwc, include_ciwc
         type(refractivityDataType), intent(in out) :: N
 
         double precision, PARAMETER :: k1=77.607E-2, k2=70.4E-2, k3=3.739E3, k4=1.45, eps=0.622
@@ -350,46 +359,46 @@ contains
         N%nColumns = int_fields%nColumns
         allocate(N%values(N%nPaths, N%nLevels, N%nColumns))
 
+        do p=1,N%nPaths
+            do l=1,N%nLevels-1
+                do c=1,N%nColumns
+                    N%values(p,l,c) = &
+                        ! I term (hydrostatic reftactivity)
+                        k1*int_fields%P(p,l,c)/int_fields%T(p,l,c) + &
+                        ! II term (refractivity of water vapor)
+                        (k2-k1)*int_fields%P(p,l,c)*int_fields%Q(p,l,c) &
+                        /((eps+0.378*int_fields%Q(p,l,c))*int_fields%T(p,l,c)) + &
+                        ! III term (refractivity due to dipole moment of water vapor)
+                        k3*int_fields%P(p,l,c)*int_fields%Q(p,l,c) &
+                        /((eps+0.378*int_fields%Q(p,l,c))*int_fields%T(p,l,c)**2)
+                enddo
+            enddo
+        enddo
+
+        ! add impact of liquid water content in clouds
         if (include_clwc) then
 
             do p=1,N%nPaths
                 do l=1,N%nLevels-1
                     do c=1,N%nColumns
-                        N%values(p,l,c) = &
-                            ! I term (hydrostatic reftactivity)
-                            k1*int_fields%P(p,l,c)/int_fields%T(p,l,c) + &
-                            ! II term (refractivity of water vapor)
-                            (k2-k1)*int_fields%P(p,l,c)*int_fields%Q(p,l,c) &
-                            /((eps+0.378*int_fields%Q(p,l,c))*int_fields%T(p,l,c)) + &
-                            ! III term (refractivity due to dipole moment of water vapor)
-                            k3*int_fields%P(p,l,c)*int_fields%Q(p,l,c) &
-                            /((eps+0.378*int_fields%Q(p,l,c))*int_fields%T(p,l,c)**2) + &
-                            ! IV term (refractivity due to permittivity of liquid water)
-                            ! non-gaseous water content impact: included ONLY liquid
-                            ! for others (ice, snow and rain) - need to apply more advanced scattering models instead
-                            k4*int_fields%clwc(p,l,c)
+                        N%values(p,l,c) = N%values(p,l,c) + k4*int_fields%clwc(p,l,c)
                     enddo
                 enddo
             enddo
+        
+        endif
 
-        else
+        ! add impact of frozen water content in clouds
+        if (include_ciwc) then
 
             do p=1,N%nPaths
                 do l=1,N%nLevels-1
                     do c=1,N%nColumns
-                        N%values(p,l,c) = &
-                            ! I term (hydrostatic reftactivity)
-                            k1*int_fields%P(p,l,c)/int_fields%T(p,l,c) + &
-                            ! II term (refractivity of water vapor)
-                            (k2-k1)*int_fields%P(p,l,c)*int_fields%Q(p,l,c) &
-                            /((eps+0.378*int_fields%Q(p,l,c))*int_fields%T(p,l,c)) + &
-                            ! III term (refractivity due to dipole moment of water vapor)
-                            k3*int_fields%P(p,l,c)*int_fields%Q(p,l,c) &
-                            /((eps+0.378*int_fields%Q(p,l,c))*int_fields%T(p,l,c)**2)
+                        N%values(p,l,c) = N%values(p,l,c) + k4*int_fields%ciwc(p,l,c)
                     enddo
                 enddo
             enddo
-
+        
         endif
 
         ! surface refractivity = 10m height refractivity

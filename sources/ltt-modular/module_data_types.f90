@@ -23,7 +23,7 @@ module module_data_types
         ! resolution: pre-defined NWP grid resolution (supports only t639, t1279)
         ! dAzimuth_deg: azimuth angle resolution in skyview
         ! zenAngleLimit_deg: maximum zenith angle in skyview
-        ! include_clwc: enables liquid water content in refractivity computation
+        ! include_cl[i]wc: enables liquid (or ice) water content in refractivity computation
         ! use_MSL_heights: use MSL heights for stations, if .false. -- use ellipsoid instead
         ! ltt_args: arguments of LTT program
 
@@ -32,7 +32,7 @@ module module_data_types
         character(len=:), allocatable :: resolution
         double precision :: dAzimuth_deg
         double precision :: zenAngleLimit_deg
-        logical :: include_clwc
+        logical :: include_clwc, include_ciwc
         logical :: use_MSL_heights
         type(argumentsType) :: ltt_args
 
@@ -108,7 +108,7 @@ module module_data_types
     ! "weatherBackgroundDataType" stores the NWP model fields from analysis or forecast grib file, given in a certain domain
     type, public :: weatherBackgroundDataType
 
-        ! DIMENSION SHAPE IS => number of longitudes X number of latitudes X number of vertical levels
+        ! DIMENSION SHAPE IS => number of longitudes +1 X number of latitudes X number of vertical levels
         ! ALSO => number of longitudes X number of latitudes
 
         integer :: nLon, nLat, nLevels

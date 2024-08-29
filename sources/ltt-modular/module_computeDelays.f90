@@ -64,7 +64,7 @@ contains
 
         double precision :: t0,t1,t2,t3
         integer, dimension(8) :: t
-        logical :: print_flag, include_clwc
+        logical :: print_flag, include_clwc, include_ciwc
 
 
         call date_and_time(values=t)
@@ -93,7 +93,8 @@ contains
 
         ! Use projected NWP fields to create refractivity N field
         include_clwc = parameters%include_clwc
-        call refractivity2D(interpolatedFields, include_clwc, N)
+        include_ciwc = parameters%include_ciwc
+        call refractivity2D(interpolatedFields, include_clwc, include_ciwc, N)
 
 
         ! Define ray tracer domain of each projection plane:
@@ -166,10 +167,10 @@ contains
 
         enddo
 
-        ! North = 360 deg (iaz = nAzimuths)
-        ! East = 90 deg (iaz = nAzimuths/4)
-        iazN = skyview%nAzimuths
-        iazE = skyview%nAzimuths/4
+        ! North = 360 deg (iaz = 1)
+        ! East = 90 deg (iaz = nAzimuths/4+1)
+        iazN = 1
+        iazE = skyview%nAzimuths/4+1
 
         ! Select plane of propagation for zenith delay case..
         ! .. in direction of horizontal component of refraction gradient:
@@ -178,8 +179,8 @@ contains
         azZen = atan2(lttDomains(iazN)%n(1,3) - lttDomains(iazN)%n(1,1), &
                       lttDomains(iazE)%n(1,3) - lttDomains(iazE)%n(1,1))
         azZen = 90 - rtodeg(azZen)
-        if (azZen < parameters%dAzimuth_deg) azZen = azZen+360.0
-        iaz = floor(azZen / parameters%dAzimuth_deg)
+        if (azZen < 0.0) azZen = azZen+360.0
+        iaz = floor(azZen / parameters%dAzimuth_deg) + 1
 
         ! Compute zenith delay
         psiSat = 0.0
@@ -233,8 +234,8 @@ contains
 
         double precision, parameter :: pi=3.14159265359
         integer, parameter :: msplit=10       ! number of differential steps within one model layer
-        integer, parameter :: niterations=8   ! number of iterations towards true starting zenith angle
-        double precision, parameter :: zaCorRate = sqrt(0.5) ! rate of correction while iterating
+        integer, parameter :: niterations=4   ! number of iterations towards true starting zenith angle
+        double precision, parameter :: zaCorRate = sqrt(1.0) ! rate of correction while iterating
 
         double precision :: za_start, alpha
         double precision :: psiRay, psiTOA, psiTan !, psiMin, psiMax

@@ -94,6 +94,13 @@ contains
                     parameters%include_clwc = .false.
                 endif
 
+            elseif (key == 'ciwc') then
+                if (value=='on') then
+                    parameters%include_ciwc = .true.
+                elseif (value=='off') then
+                    parameters%include_ciwc = .false.
+                endif
+
             elseif (key == 'use_MSL_heights') then
                 if (value=='on') then
                     parameters%use_MSL_heights = .true.
@@ -311,7 +318,7 @@ contains
         double precision, dimension(:), allocatable :: values
 
         ! 1. Allocate and initiate fields data.
-        fields%nLon = domain%gridNLon
+        fields%nLon = domain%gridNLon + 1
         fields%nLat = domain%gridNLat
         fields%nLevels = domain%nLevels
 
@@ -320,12 +327,14 @@ contains
         allocate(fields%T(fields%nLon, fields%nLat, fields%nLevels))
         allocate(fields%Q(fields%nLon, fields%nLat, fields%nLevels))
         allocate(fields%clwc(fields%nLon, fields%nLat, fields%nLevels))
+        allocate(fields%ciwc(fields%nLon, fields%nLat, fields%nLevels))
 
         fields%fis=0.0
         fields%lnps=0.0
         fields%T=0.0
         fields%Q=0.0
         fields%clwc=0.0
+        fields%ciwc=0.0
 
         ! 2. Read OpenIFS file, count messages inside.
         gribFileName = trim(parameters%ltt_args%inputFileDir)//trim(parameters%ltt_args%inputFileName)
@@ -354,35 +363,68 @@ contains
             endif
 
             select case (paramId)
+
+            ! paramId (grib codes) look-up tables: https://confluence.ecmwf.int/display/OIFS/How+to+control+OpenIFS+output
+
             case (129) ! 2-d surface geopotential
-                do jx=1,fields%nLon
+                do jx=1,fields%nLon-1
                     do jy=1,fields%nLat
-                        fields%fis(jx,jy) = values((jy-1)*fields%nLon+jx)
+                        fields%fis(jx,jy) = values((jy-1)*(fields%nLon-1)+jx)
                     enddo
                 enddo
+                ! make a closed cylinder, array with equal front and back values
+                do jy=1,fields%nLat
+                    fields%fis(fields%nLon,jy) = values((jy-1)*(fields%nLon-1)+1)
+                enddo
+
             case (130) ! 3-d temperature
-                do jx=1,fields%nLon
+                do jx=1,fields%nLon-1
                     do jy=1,fields%nLat
-                        fields%T(jx,jy,level) = values((jy-1)*fields%nLon+jx)
+                        fields%T(jx,jy,level) = values((jy-1)*(fields%nLon-1)+jx)
                     enddo
                 enddo
+                do jy=1,fields%nLat
+                    fields%T(fields%nLon,jy,level) = values((jy-1)*(fields%nLon-1)+1)
+                enddo
+                
             case (133) ! 3-d specific humidity
-                do jx=1,fields%nLon
+                do jx=1,fields%nLon-1
                     do jy=1,fields%nLat
-                        fields%Q(jx,jy,level) = values((jy-1)*fields%nLon+jx)
+                        fields%Q(jx,jy,level) = values((jy-1)*(fields%nLon-1)+jx)
                     enddo
                 enddo
+                do jy=1,fields%nLat
+                    fields%Q(fields%nLon,jy,level) = values((jy-1)*(fields%nLon-1)+1)
+                enddo
+
             case (152) ! 2-d logarithm of surface pressure
-                do jx=1,fields%nLon
+                do jx=1,fields%nLon-1
                     do jy=1,fields%nLat
-                        fields%lnps(jx,jy) = values((jy-1)*fields%nLon+jx)
+                        fields%lnps(jx,jy) = values((jy-1)*(fields%nLon-1)+jx)
                     enddo
                 enddo
+                do jy=1,fields%nLat
+                    fields%lnps(fields%nLon,jy) = values((jy-1)*(fields%nLon-1)+1)
+                enddo
+
             case (246) ! 3-d clwc
-                do jx=1,fields%nLon
+                do jx=1,fields%nLon-1
                     do jy=1,fields%nLat
-                        fields%clwc(jx,jy,level) = values((jy-1)*fields%nLon+jx)
+                        fields%clwc(jx,jy,level) = values((jy-1)*(fields%nLon-1)+jx)
                     enddo
+                enddo
+                do jy=1,fields%nLat
+                    fields%clwc(fields%nLon,jy,level) = values((jy-1)*(fields%nLon-1)+1)
+                enddo
+
+            case (247) ! 3-d ciwc
+                do jx=1,fields%nLon-1
+                    do jy=1,fields%nLat
+                        fields%ciwc(jx,jy,level) = values((jy-1)*(fields%nLon-1)+jx)
+                    enddo
+                enddo
+                do jy=1,fields%nLat
+                    fields%ciwc(fields%nLon,jy,level) = values((jy-1)*(fields%nLon-1)+1)
                 enddo
             ! case (someNewId) ! field you wish to add
             !     do jx=1,fields%nLon
