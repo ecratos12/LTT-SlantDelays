@@ -1,6 +1,8 @@
 # LTT-SlantDelays
 This is a slant delay forward model based on ray tracing for determination of the GNSS signal path through the Numerical Weather Prediction model grid.
 
+[![DOI](https://zenodo.org/badge/459532087.svg)](https://doi.org/10.5281/zenodo.14237334)
+
 ## LTT - "Least Travel Time"
 Concept of Least-Travel time operator is based on search for the signal path that provides the shortest possible travel time from the transmitter to the receiver. 
 
