@@ -92,9 +92,7 @@ contains
 
 
         ! Use projected NWP fields to create refractivity N field
-        include_clwc = parameters%include_clwc
-        include_ciwc = parameters%include_ciwc
-        call refractivity2D(interpolatedFields, include_clwc, include_ciwc, N)
+        call refractivity2D(interpolatedFields, parameters, N)
 
 
         ! Define ray tracer domain of each projection plane:
@@ -132,11 +130,7 @@ contains
         ! compute station's model height
         call date_and_time(values=t)
         t2 = t(5)*3600.0+t(6)*60.0+t(7)*1.0+t(8)*0.001
-        if (parameters%use_MSL_heights) then
-            stModelHeight = station%MSL_height - interpolatedFields%z(1,interpolatedFields%nLevels,2)
-        else
-            stModelHeight = station%elp_height - interpolatedFields%z(1,interpolatedFields%nLevels,2)
-        endif
+        stModelHeight = station%MSL_height - interpolatedFields%z(1,interpolatedFields%nLevels,2)
 
         print_flag = .false.
 
@@ -150,11 +144,7 @@ contains
             ! get start and finish (satellite) r-psi coordinates
             ! compute target's psi angle
             ! target's radius is constant - skyview%rsat
-            if (parameters%use_MSL_heights) then
-                stR = interpolatedFields%localRadius(iaz,2) + station%MSL_height
-            else
-                stR = interpolatedFields%localRadius(iaz,2) + station%elp_height
-            endif
+            stR = interpolatedFields%localRadius(iaz,2) + station%MSL_height
             zenAngle = degtor(skyview%set(i)%Z)
             psiSat = zenAngle - asin((stR/skyview%rsat)*sin(zenAngle))
 

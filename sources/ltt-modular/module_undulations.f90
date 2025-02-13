@@ -31,14 +31,15 @@ contains
         integer :: i,j
 
         ! access used resolution of NWP fields
-        if (parameters%resolution == 't639') then
+        select case (parameters%resolution)
+        case ('t639')
             undulationsFile='LTT_conf_files/undul-639-egm08.txt'
-        elseif (parameters%resolution == 't1279') then
+        case ('t1279')
             undulationsFile='LTT_conf_files/undul-1279-egm08.txt'
-        else
+        case default
             print*,'Unknown resolution. Choose supported t639 or t1279.'
             stop
-        endif
+        end select
 
         undulations%nLon = nwp_domain%gridNLon
         undulations%nLat = nwp_domain%gridNLat
@@ -64,10 +65,11 @@ contains
 
 
     ! compute station's ellipsoidal height using MSL height and geoid undulation
-    subroutine station_undulations(undulations, nwp_domain, stationsList)
-        use module_data_types, only: nwpDomainType, stationsListType, stationType
+    subroutine station_undulations(parameters, undulations, nwp_domain, stationsList)
+        use module_data_types, only: nwpDomainType, stationsListType, stationType, parametersType
 
         implicit none
+        type(parametersType), intent(in) :: parameters
         type(undulationsType), intent(in) :: undulations
         type(nwpDomainType), intent(in) :: nwp_domain
         type(stationsListType), intent(in out) :: stationsList
@@ -79,9 +81,9 @@ contains
 
             ! find the grid point indeces corresponding to the geographical coordinates of the station
             if (stationsList%list(i)%lon < 0.0) then
-                gridx = (stationsList%list(i)%lon + 360.0)/nwp_domain%deltaLon
+                gridx = (stationsList%list(i)%lon + 360.0)/nwp_domain%deltaLon + 1.0
             else
-                gridx = stationsList%list(i)%lon/nwp_domain%deltaLon
+                gridx = stationsList%list(i)%lon/nwp_domain%deltaLon + 1.0
             endif
 
             ilat=1
@@ -120,7 +122,11 @@ contains
             ! N: Geoid undulation
             ! H: Orthometric height (MSL height)
             ! h: Height above the reference ellipsoid
-            stationsList%list(i)%elp_height = stationsList%list(i)%MSL_height + localUnd
+            if (parameters%use_MSL_heights) then    ! compute elp from MSL
+                stationsList%list(i)%elp_height = stationsList%list(i)%MSL_height + localUnd
+            else                                    ! compute MSL from elp
+                stationsList%list(i)%MSL_height = stationsList%list(i)%elp_height - localUnd
+            endif
 
             ! print *,stationsList%list(i)%name, localUnd, stationsList%list(i)%elp_height
             ! print *,stationsList%list(i)%lat, ',', stationsList%list(i)%lon, ',', stationsList%list(i)%elp_height 

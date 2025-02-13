@@ -106,6 +106,31 @@ contains
         gravaccelMSL = g
 
     end function gravaccelMSL
+
+
+    !==========================================================================
+    ! Function microwaveN calculates the refractivity of air
+    ! in the microwave band. Uses formula for phase refractive index 
+    ! following Eresmaa_Järvinen2006
+    ! Optional terms like from water content are not included
+    ! 
+    ! Computation is done unvectorized (single value is output)
+    double precision function microwaveN(T, p, q)
+
+        implicit none
+        double precision :: T          ! in K
+        double precision :: p          ! in Pa
+        double precision :: q          ! unitless (in kg/kg)
+
+        double precision, parameter :: &
+        k1=77.607E-2, &
+        k2=70.4E-2, &
+        k3=3.739E3, &
+        eps=0.622
+
+        microwaveN = k1*p/T + (k2-k1)*p*q/((eps+0.378*q)*T) + k3*p*q/((eps+0.378*q)*T**2)
+
+    end function microwaveN
         
 
     ! Converts geopotential (=dynamic) height "gpH" [m] to orthometric height "gpH2ortH" [m]

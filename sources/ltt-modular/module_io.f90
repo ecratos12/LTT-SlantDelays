@@ -72,56 +72,59 @@ contains
         do i=1,nlines
             read(2,*) key, value
             print *, key, 'is ', value
-            if (key == 'startStation') then
+
+            select case (key)
+            case ('startStation')
                 read(value,*) parameters%startStation
-
-            elseif (key == 'endStation') then
+            case ('endStation')
                 read(value,*) parameters%endStation
-
-            elseif (key == 'resolution') then
+            case ('resolution')
                 parameters%resolution = value
-
-            elseif (key == 'dAzimuth_deg') then
+            case ('dAzimuth_deg')
                 read(value,*) parameters%dAzimuth_deg
-
-            elseif (key == 'zenAngleLimit_deg') then
+            case ('zenAngleLimit_deg')
                 read(value,*) parameters%zenAngleLimit_deg
 
-            elseif (key == 'clwc') then
+            case ('clwc')
                 if (value=='on') then
                     parameters%include_clwc = .true.
                 elseif (value=='off') then
                     parameters%include_clwc = .false.
                 endif
-
-            elseif (key == 'ciwc') then
+            case ('ciwc')
                 if (value=='on') then
                     parameters%include_ciwc = .true.
                 elseif (value=='off') then
                     parameters%include_ciwc = .false.
                 endif
-
-            elseif (key == 'use_MSL_heights') then
+            case ('use_MSL_heights')
                 if (value=='on') then
                     parameters%use_MSL_heights = .true.
                 elseif (value=='off') then
                     parameters%use_MSL_heights = .false.
                 endif
-
-            else
+            case ('station_heights')        ! alias for "use_MSL_heights" parameter
+                if (value=='MSL') then
+                    parameters%use_MSL_heights = .true.
+                elseif (value=='elp') then
+                    parameters%use_MSL_heights = .false.
+                endif
+            case default
                 print*,'Error! Unknown parameter ',  key
                 stop
-            endif
+            end select
+
         enddo
         close(2)
 
     end subroutine read_parameters
 
 
-    subroutine read_stations(stations)
-        use module_data_types, only: stationType, stationsListType
+    subroutine read_stations(parameters, stations)
+        use module_data_types, only: stationType, stationsListType, parametersType
 
         implicit none
+        type(parametersType), intent(in) :: parameters
         type(stationsListType), intent(in out) :: stations
 
         character(len=90) :: file = 'LTT_conf_files/stationCoordinates_extd.txt'
@@ -148,9 +151,15 @@ contains
         stations%size = nlines
 
         open(2, file = trim(file))
+        if (parameters%use_MSL_heights) then
         do i=1,nlines
             read(2,*) stations%list(i)%name, stations%list(i)%lon, stations%list(i)%lat, stations%list(i)%MSL_height
         enddo
+        else
+            do i=1,nlines
+                read(2,*) stations%list(i)%name, stations%list(i)%lon, stations%list(i)%lat, stations%list(i)%elp_height
+            enddo
+        endif
         close(2)
 
     end subroutine read_stations
@@ -176,16 +185,17 @@ contains
 
 
         ! access used resolution of OpenIFS fields
-        if (parameters%resolution == 't639') then
+        select case (parameters%resolution)
+        case ('t639')
             latsFileName='LTT_conf_files/lats_t639.txt'
             vertCoordFile='LTT_conf_files/vert_coord_l91.dat'
-        elseif (parameters%resolution == 't1279') then
+        case ('t1279')
             latsFileName='LTT_conf_files/lats_t1279.txt'
             vertCoordFile='LTT_conf_files/vert_coord_l137.dat'
-        else
+        case default
             print*,'Unknown resolution. Choose supported t639 or t1279.'
             stop
-        endif
+        end select
 
 
         ! read the latitudes of OpenIFS from an ASCII file
@@ -326,8 +336,8 @@ contains
         allocate(fields%lnps(fields%nLon, fields%nLat))
         allocate(fields%T(fields%nLon, fields%nLat, fields%nLevels))
         allocate(fields%Q(fields%nLon, fields%nLat, fields%nLevels))
-        allocate(fields%clwc(fields%nLon, fields%nLat, fields%nLevels))
-        allocate(fields%ciwc(fields%nLon, fields%nLat, fields%nLevels))
+        if (parameters%include_clwc) allocate(fields%clwc(fields%nLon, fields%nLat, fields%nLevels))
+        if (parameters%include_ciwc) allocate(fields%ciwc(fields%nLon, fields%nLat, fields%nLevels))
 
         fields%fis=0.0
         fields%lnps=0.0
@@ -408,24 +418,28 @@ contains
                 enddo
 
             case (246) ! 3-d clwc
-                do jx=1,fields%nLon-1
-                    do jy=1,fields%nLat
-                        fields%clwc(jx,jy,level) = values((jy-1)*(fields%nLon-1)+jx)
+                if (parameters%include_clwc) then
+                    do jx=1,fields%nLon-1
+                        do jy=1,fields%nLat
+                            fields%clwc(jx,jy,level) = values((jy-1)*(fields%nLon-1)+jx)
+                        enddo
                     enddo
-                enddo
-                do jy=1,fields%nLat
-                    fields%clwc(fields%nLon,jy,level) = values((jy-1)*(fields%nLon-1)+1)
-                enddo
+                    do jy=1,fields%nLat
+                        fields%clwc(fields%nLon,jy,level) = values((jy-1)*(fields%nLon-1)+1)
+                    enddo
+                endif
 
             case (247) ! 3-d ciwc
-                do jx=1,fields%nLon-1
-                    do jy=1,fields%nLat
-                        fields%ciwc(jx,jy,level) = values((jy-1)*(fields%nLon-1)+jx)
+                if (parameters%include_clwc) then
+                    do jx=1,fields%nLon-1
+                        do jy=1,fields%nLat
+                            fields%ciwc(jx,jy,level) = values((jy-1)*(fields%nLon-1)+jx)
+                        enddo
                     enddo
-                enddo
-                do jy=1,fields%nLat
-                    fields%ciwc(fields%nLon,jy,level) = values((jy-1)*(fields%nLon-1)+1)
-                enddo
+                    do jy=1,fields%nLat
+                        fields%ciwc(fields%nLon,jy,level) = values((jy-1)*(fields%nLon-1)+1)
+                    enddo
+                endif
             ! case (someNewId) ! field you wish to add
             !     do jx=1,fields%nLon
             !         do jy=1,fields%nLat

@@ -341,17 +341,19 @@ contains
     ! Computation is done of all possible paths,
     ! that are emerging from set of unique azimuths in skyview
     ! int_fields and N have the same dimension
-    subroutine refractivity2D(int_fields, include_clwc, include_ciwc, N)
-        use module_data_types, only: weatherInterpolatedDataType, refractivityDataType
+    subroutine refractivity2D(int_fields, parameters, N)
+        use module_data_types, only: weatherInterpolatedDataType, refractivityDataType, parametersType
         use module_utility
 
         implicit none
         type(weatherInterpolatedDataType), intent(in) :: int_fields
-        logical, intent(in) :: include_clwc, include_ciwc
+        type(parametersType), intent(in) :: parameters
         type(refractivityDataType), intent(in out) :: N
 
-        double precision, PARAMETER :: k1=77.607E-2, k2=70.4E-2, k3=3.739E3, k4=1.45, eps=0.622
-        integer :: p,l,c
+        ! according to
+        ! Zou, X., S. Yang, and P. S. Ray. “Impacts of Ice Clouds on GPS Radio Occultation Measurements.” Journal of the Atmospheric Sciences 69, no. 12 (December 1, 2012): 3670–82.
+        double precision, PARAMETER :: kLiquid=1.45, kIce=0.69
+        integer :: p,l,c ! indexes
 
         ! interpolated fields and N have the same dimension
         N%nPaths = int_fields%nPaths
@@ -362,43 +364,30 @@ contains
         do p=1,N%nPaths
             do l=1,N%nLevels-1
                 do c=1,N%nColumns
-                    N%values(p,l,c) = &
-                        ! I term (hydrostatic reftactivity)
-                        k1*int_fields%P(p,l,c)/int_fields%T(p,l,c) + &
-                        ! II term (refractivity of water vapor)
-                        (k2-k1)*int_fields%P(p,l,c)*int_fields%Q(p,l,c) &
-                        /((eps+0.378*int_fields%Q(p,l,c))*int_fields%T(p,l,c)) + &
-                        ! III term (refractivity due to dipole moment of water vapor)
-                        k3*int_fields%P(p,l,c)*int_fields%Q(p,l,c) &
-                        /((eps+0.378*int_fields%Q(p,l,c))*int_fields%T(p,l,c)**2)
+                    N%values(p,l,c) = microwaveN(int_fields%T(p,l,c), &
+                                                int_fields%P(p,l,c), &
+                                                int_fields%Q(p,l,c))
                 enddo
             enddo
         enddo
-
-        ! add impact of liquid water content in clouds
-        if (include_clwc) then
-
+        ! optional microwave refractivity terms are added here
+        if (parameters%include_clwc) then
             do p=1,N%nPaths
                 do l=1,N%nLevels-1
                     do c=1,N%nColumns
-                        N%values(p,l,c) = N%values(p,l,c) + k4*int_fields%clwc(p,l,c)
+                        N%values(p,l,c) = N%values(p,l,c) + kLiquid*int_fields%clwc(p,l,c)
                     enddo
                 enddo
             enddo
-        
         endif
-
-        ! add impact of frozen water content in clouds
-        if (include_ciwc) then
-
+        if (parameters%include_ciwc) then
             do p=1,N%nPaths
                 do l=1,N%nLevels-1
                     do c=1,N%nColumns
-                        N%values(p,l,c) = N%values(p,l,c) + k4*int_fields%ciwc(p,l,c)
+                        N%values(p,l,c) = N%values(p,l,c) + kIce*int_fields%ciwc(p,l,c)
                     enddo
                 enddo
             enddo
-        
         endif
 
         ! surface refractivity = 10m height refractivity

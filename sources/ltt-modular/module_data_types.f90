@@ -4,7 +4,7 @@ module module_data_types
     ! "argumentsType" represents LTT program arguments
     type, public :: argumentsType
 
-        ! setupFile: input parameters for LTT operator
+        ! setupFile: input parameters for LTT algorithm
         ! inputFileName: grib-file with weather data and domain
         ! outputFileDir: directory with computed LTT slant delays
 
@@ -16,7 +16,7 @@ module module_data_types
     end type argumentsType
 
 
-    ! "parametersType" represents essential parameters for LTT operator
+    ! "parametersType" represents essential parameters for LTT algorithm
     type, public :: parametersType
 
         ! [start,end]Station: go through station list only within this range of indexes

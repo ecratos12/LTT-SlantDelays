@@ -17,15 +17,12 @@
 ! Modularization and refactoring: Maksym Vasiuta
 ! date 24.01.2022
 !
-! Example run call:
-! ./slfwd_v9.exe oifs2016120100+000 p000 $inputdir $outputdir 1 66 t1279
-!
 !--------------------------------------------------------------------------
 !
 !**************************************************************************
 
 
-program ltt_v9
+program ltt
     use module_data_types
     use module_io
     use module_skyview
@@ -73,7 +70,7 @@ program ltt_v9
 
     ! 2. Read all observing stations
     print*,'Obtaining list of observing stations ...'
-    call read_stations(stations)
+    call read_stations(parameters, stations)
 
     ! 3. Read OpenIFS NWP data domain configuration
     print*,'Reading the GRIB file '//TRIM(arguments%inputFileDir)//TRIM(arguments%inputFileName)//' ...'
@@ -84,7 +81,7 @@ program ltt_v9
     print*,'Obtaining geoid undulations ...'
     call read_undulations(parameters, oifsDomain, undulations)
     ! 4.1 Apply geoid undulations to station heights
-    call station_undulations(undulations, oifsDomain, stations)
+    call station_undulations(parameters, undulations, oifsDomain, stations)
 
     ! 5. Read OpenIFS NWP data: fields of orography, logarithm of surface pressure, 
     ! temperature, specific humidity and specific cloud liquid water content
@@ -118,4 +115,4 @@ program ltt_v9
     enddo
 
     
-end program ltt_v9
+end program ltt
